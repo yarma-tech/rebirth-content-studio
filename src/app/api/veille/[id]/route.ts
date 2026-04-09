@@ -3,8 +3,15 @@ import { z } from "zod"
 import { getServiceClient } from "@/lib/supabase"
 
 const updateSchema = z.object({
+  title: z.string().min(1).optional(),
+  summary: z.string().nullable().optional(),
+  pme_angle: z.string().nullable().optional(),
+  source_url: z.string().url().nullable().optional(),
+  source_name: z.string().nullable().optional(),
+  suggested_format: z.enum(["post", "video", "both"]).nullable().optional(),
+  urgency: z.enum(["immediate", "this_week", "backlog"]).optional(),
+  relevance_score: z.number().min(0).max(1).nullable().optional(),
   status: z.enum(["new", "reviewed", "used", "dismissed"]).optional(),
-  relevance_score: z.number().min(0).max(1).optional(),
 })
 
 export async function PATCH(

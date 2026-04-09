@@ -23,15 +23,103 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Eye, Plus, ExternalLink, PenLine, X } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Eye, Plus, ExternalLink, Pencil, FileText, X } from "lucide-react"
 import { toast } from "sonner"
 import type { VeilleItem } from "@/types"
+
+function VeilleForm({
+  defaultValues,
+  onSubmit,
+  submitLabel,
+}: {
+  defaultValues?: Partial<VeilleItem>
+  onSubmit: (data: Record<string, unknown>) => Promise<void>
+  submitLabel: string
+}) {
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setSubmitting(true)
+    const form = new FormData(e.currentTarget)
+    await onSubmit({
+      title: form.get("title") as string,
+      summary: (form.get("summary") as string) || null,
+      pme_angle: (form.get("pme_angle") as string) || null,
+      source_url: (form.get("source_url") as string) || null,
+      source_name: (form.get("source_name") as string) || null,
+      urgency: form.get("urgency") as string,
+      suggested_format: (form.get("suggested_format") as string) || null,
+    })
+    setSubmitting(false)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="title">Titre</Label>
+        <Input id="title" name="title" required className="mt-1" defaultValue={defaultValues?.title ?? ""} />
+      </div>
+      <div>
+        <Label htmlFor="summary">Resume</Label>
+        <Textarea id="summary" name="summary" className="mt-1 max-h-[120px] overflow-y-auto resize-none" rows={3} defaultValue={defaultValues?.summary ?? ""} />
+      </div>
+      <div>
+        <Label htmlFor="pme_angle">Angle PME</Label>
+        <Input id="pme_angle" name="pme_angle" className="mt-1" placeholder="En quoi ca concerne les PME ?" defaultValue={defaultValues?.pme_angle ?? ""} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="source_url">URL source</Label>
+          <Input id="source_url" name="source_url" type="url" className="mt-1" defaultValue={defaultValues?.source_url ?? ""} />
+        </div>
+        <div>
+          <Label htmlFor="source_name">Source</Label>
+          <Input id="source_name" name="source_name" className="mt-1" placeholder="TechCrunch, etc." defaultValue={defaultValues?.source_name ?? ""} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label>Urgence</Label>
+          <Select name="urgency" defaultValue={defaultValues?.urgency ?? "this_week"}>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="immediate">Immediat</SelectItem>
+              <SelectItem value="this_week">Cette semaine</SelectItem>
+              <SelectItem value="backlog">Backlog</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Format suggere</Label>
+          <Select name="suggested_format" defaultValue={defaultValues?.suggested_format ?? undefined}>
+            <SelectTrigger className="mt-1"><SelectValue placeholder="Format" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="post">Post</SelectItem>
+              <SelectItem value="video">Video</SelectItem>
+              <SelectItem value="both">Les deux</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Button type="submit" className="w-full" disabled={submitting}>
+        {submitting ? "..." : submitLabel}
+      </Button>
+    </form>
+  )
+}
 
 export default function VeillePage() {
   const router = useRouter()
   const [items, setItems] = useState<VeilleItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [editingItem, setEditingItem] = useState<VeilleItem | null>(null)
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -50,31 +138,36 @@ export default function VeillePage() {
 
   useEffect(() => { loadItems() }, [loadItems])
 
-  const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const form = new FormData(e.currentTarget)
-    const body = {
-      title: form.get("title") as string,
-      summary: (form.get("summary") as string) || null,
-      pme_angle: (form.get("pme_angle") as string) || null,
-      source_url: (form.get("source_url") as string) || null,
-      source_name: (form.get("source_name") as string) || null,
-      urgency: form.get("urgency") as string,
-      suggested_format: (form.get("suggested_format") as string) || null,
-    }
-
+  const handleAdd = async (data: Record<string, unknown>) => {
     try {
       const res = await fetch("/api/veille", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(data),
       })
       if (!res.ok) throw new Error()
-      toast.success("Sujet de veille ajouté !")
+      toast.success("Sujet de veille ajoute !")
       setShowAdd(false)
       loadItems()
     } catch {
       toast.error("Erreur lors de l'ajout")
+    }
+  }
+
+  const handleEdit = async (data: Record<string, unknown>) => {
+    if (!editingItem) return
+    try {
+      const res = await fetch(`/api/veille/${editingItem.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Sujet mis a jour !")
+      setEditingItem(null)
+      loadItems()
+    } catch {
+      toast.error("Erreur lors de la mise a jour")
     }
   }
 
@@ -87,7 +180,7 @@ export default function VeillePage() {
       })
       if (!res.ok) throw new Error()
       setItems((prev) => prev.filter((i) => i.id !== id))
-      toast.success("Sujet écarté")
+      toast.success("Sujet ecarte")
     } catch {
       toast.error("Erreur")
     }
@@ -100,7 +193,7 @@ export default function VeillePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: item.title,
-          content: `${item.summary || ""}\n\nAngle PME : ${item.pme_angle || "À définir"}`,
+          content: `${item.summary || ""}\n\nAngle PME : ${item.pme_angle || "A definir"}`,
           pillar: null,
           status: "idea",
           source_veille_id: item.id,
@@ -109,7 +202,7 @@ export default function VeillePage() {
       })
       if (!res.ok) throw new Error()
       const data = await res.json()
-      toast.success("Brouillon créé — redirection vers l'éditeur")
+      toast.success("Brouillon cree — redirection vers l'editeur")
       router.push(`/posts/${data.post.id}`)
     } catch {
       toast.error("Erreur")
@@ -122,7 +215,7 @@ export default function VeillePage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Veille</h1>
           <p className="text-muted-foreground mt-1">
-            Sujets détectés pour ton contenu LinkedIn
+            Sujets detectes pour ton contenu LinkedIn
           </p>
         </div>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
@@ -134,58 +227,27 @@ export default function VeillePage() {
             <DialogHeader>
               <DialogTitle>Nouveau sujet de veille</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <Label htmlFor="title">Titre</Label>
-                <Input id="title" name="title" required className="mt-1" />
-              </div>
-              <div>
-                <Label htmlFor="summary">Résumé</Label>
-                <Textarea id="summary" name="summary" className="mt-1 max-h-[120px] overflow-y-auto resize-none" rows={3} />
-              </div>
-              <div>
-                <Label htmlFor="pme_angle">Angle PME</Label>
-                <Input id="pme_angle" name="pme_angle" className="mt-1" placeholder="En quoi ça concerne les PME ?" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="source_url">URL source</Label>
-                  <Input id="source_url" name="source_url" type="url" className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="source_name">Source</Label>
-                  <Input id="source_name" name="source_name" className="mt-1" placeholder="TechCrunch, etc." />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Urgence</Label>
-                  <Select name="urgency" defaultValue="this_week">
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="immediate">Immédiat</SelectItem>
-                      <SelectItem value="this_week">Cette semaine</SelectItem>
-                      <SelectItem value="backlog">Backlog</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Format suggéré</Label>
-                  <Select name="suggested_format">
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Format" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="post">Post</SelectItem>
-                      <SelectItem value="video">Vidéo</SelectItem>
-                      <SelectItem value="both">Les deux</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button type="submit" className="w-full">Ajouter</Button>
-            </form>
+            <VeilleForm onSubmit={handleAdd} submitLabel="Ajouter" />
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifier le sujet</DialogTitle>
+          </DialogHeader>
+          {editingItem && (
+            <VeilleForm
+              key={editingItem.id}
+              defaultValues={editingItem}
+              onSubmit={handleEdit}
+              submitLabel="Sauvegarder"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="space-y-4">
@@ -249,21 +311,44 @@ export default function VeillePage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {item.source_url && (
-                      <a
-                        href={item.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={buttonVariants({ variant: "ghost", size: "icon" })}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <a
+                            href={item.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={buttonVariants({ variant: "ghost", size: "icon" })}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>Ouvrir la source</TooltipContent>
+                      </Tooltip>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => handleCreateDraft(item)}>
-                      <PenLine className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDismiss(item.id)}>
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Button variant="ghost" size="icon" onClick={() => setEditingItem(item)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Modifier le sujet</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Button variant="ghost" size="icon" onClick={() => handleCreateDraft(item)}>
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Creer un brouillon</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Button variant="ghost" size="icon" onClick={() => handleDismiss(item.id)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Ecarter</TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               </CardContent>
