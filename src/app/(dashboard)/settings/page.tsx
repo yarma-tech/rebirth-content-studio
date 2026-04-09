@@ -4,10 +4,34 @@ import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Database, Bot, Newspaper, Link2, Bell, CheckCircle, AlertCircle } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Database, Bot, Newspaper, Link2, Bell, CheckCircle, AlertCircle, Rss, Plus, Trash2, Video } from "lucide-react"
 import { toast } from "sonner"
+
+interface VeilleSource {
+  name: string
+  url: string
+  category: "ai_news" | "pme_stories"
+  language: "en" | "fr"
+  type: "rss" | "youtube"
+}
 
 export default function SettingsPage() {
   return (
@@ -19,6 +43,8 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const searchParams = useSearchParams()
+  const [veilleSources, setVeilleSources] = useState<VeilleSource[]>([])
+  const [showAddSource, setShowAddSource] = useState(false)
   const [linkedinStatus, setLinkedinStatus] = useState<{
     connected: boolean
     expired?: boolean
@@ -38,7 +64,64 @@ function SettingsContent() {
       .then((r) => r.json())
       .then(setLinkedinStatus)
       .catch(() => setLinkedinStatus({ connected: false }))
+
+    fetch("/api/settings/veille-sources")
+      .then((r) => r.json())
+      .then((d) => setVeilleSources(d.sources || []))
+      .catch(() => {})
   }, [searchParams])
+
+  const handleAddSource = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = new FormData(e.currentTarget)
+    let url = form.get("url") as string
+    const isYoutube = url.includes("youtube.com")
+
+    // Convert YouTube channel URL to RSS
+    if (isYoutube && url.includes("/channel/")) {
+      const match = url.match(/channel\/([\w-]+)/)
+      if (match) url = `https://www.youtube.com/feeds/videos.xml?channel_id=${match[1]}`
+    }
+
+    const newSource: VeilleSource = {
+      name: form.get("name") as string,
+      url,
+      category: form.get("category") as VeilleSource["category"],
+      language: form.get("language") as VeilleSource["language"],
+      type: isYoutube ? "youtube" : "rss",
+    }
+
+    const updated = [...veilleSources, newSource]
+    try {
+      const res = await fetch("/api/settings/veille-sources", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources: updated }),
+      })
+      if (!res.ok) throw new Error()
+      setVeilleSources(updated)
+      setShowAddSource(false)
+      toast.success("Source ajoutee !")
+    } catch {
+      toast.error("Erreur lors de l'ajout")
+    }
+  }
+
+  const handleRemoveSource = async (index: number) => {
+    const updated = veilleSources.filter((_, i) => i !== index)
+    try {
+      const res = await fetch("/api/settings/veille-sources", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources: updated }),
+      })
+      if (!res.ok) throw new Error()
+      setVeilleSources(updated)
+      toast.success("Source supprimee")
+    } catch {
+      toast.error("Erreur")
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -101,6 +184,100 @@ function SettingsContent() {
                 >
                   Connecter LinkedIn
                 </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Rss className="h-5 w-5 text-orange-500" />
+                <div>
+                  <CardTitle className="text-base">Sources de veille</CardTitle>
+                  <CardDescription>{veilleSources.length} source(s) configuree(s)</CardDescription>
+                </div>
+              </div>
+              <Dialog open={showAddSource} onOpenChange={setShowAddSource}>
+                <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  <Plus className="h-4 w-4 mr-1" /> Ajouter
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Ajouter une source de veille</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAddSource} className="space-y-4">
+                    <div>
+                      <Label htmlFor="src-name">Nom</Label>
+                      <Input id="src-name" name="name" required placeholder="Ex: TechCrunch AI" className="mt-1" />
+                    </div>
+                    <div>
+                      <Label htmlFor="src-url">URL du flux RSS ou chaine YouTube</Label>
+                      <Input id="src-url" name="url" required type="url" placeholder="https://..." className="mt-1" />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        YouTube : colle l&apos;URL de la chaine (ex: youtube.com/channel/xxx)
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Categorie</Label>
+                        <Select name="category" defaultValue="ai_news">
+                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ai_news">Actualites IA</SelectItem>
+                            <SelectItem value="pme_stories">Histoires PME</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Langue</Label>
+                        <Select name="language" defaultValue="fr">
+                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fr">Francais</SelectItem>
+                            <SelectItem value="en">Anglais</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button type="submit" className="w-full">Ajouter la source</Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {veilleSources.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune source configuree.</p>
+            ) : (
+              <div className="space-y-2">
+                {veilleSources.map((source, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-accent/50 group">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {source.type === "youtube" ? (
+                        <Video className="h-4 w-4 text-red-500 shrink-0" />
+                      ) : (
+                        <Rss className="h-4 w-4 text-orange-500 shrink-0" />
+                      )}
+                      <span className="text-sm font-medium truncate">{source.name}</span>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {source.category === "ai_news" ? "IA" : "PME"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        {source.language.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 shrink-0"
+                      onClick={() => handleRemoveSource(i)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
