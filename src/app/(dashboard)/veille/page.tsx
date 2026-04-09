@@ -28,7 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw } from "lucide-react"
+import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -222,26 +222,54 @@ export default function VeillePage() {
     }
   }
 
+  const [generatingDraftFor, setGeneratingDraftFor] = useState<string | null>(null)
+
   const handleCreateDraft = async (item: VeilleItem) => {
+    setGeneratingDraftFor(item.id)
+    toast.info("Generation du brouillon en cours...")
     try {
-      const res = await fetch("/api/posts", {
+      // 1. Generate content via AI
+      const genRes = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: `${item.title}. ${item.summary || ""} ${item.pme_angle ? `Angle PME : ${item.pme_angle}` : ""}`,
+          pillar: "vulgarisation",
+        }),
+      })
+      if (!genRes.ok) throw new Error("Erreur generation IA")
+
+      const reader = genRes.body?.getReader()
+      if (!reader) throw new Error("No stream")
+      const decoder = new TextDecoder()
+      let content = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        content += decoder.decode(value, { stream: true })
+      }
+
+      // 2. Save as draft
+      const postRes = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: item.title,
-          content: `${item.summary || ""}\n\nAngle PME : ${item.pme_angle || "A definir"}`,
-          pillar: null,
-          status: "idea",
+          content,
+          pillar: "vulgarisation",
+          status: "draft",
           source_veille_id: item.id,
-          ai_generated: false,
+          ai_generated: true,
         }),
       })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      toast.success("Brouillon cree — redirection vers l'editeur")
+      if (!postRes.ok) throw new Error("Erreur sauvegarde")
+      const data = await postRes.json()
+      toast.success("Brouillon IA genere !")
       router.push(`/posts/${data.post.id}`)
     } catch {
-      toast.error("Erreur")
+      toast.error("Erreur lors de la generation")
+    } finally {
+      setGeneratingDraftFor(null)
     }
   }
 
@@ -406,11 +434,20 @@ export default function VeillePage() {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger>
-                        <Button variant="ghost" size="icon" onClick={() => handleCreateDraft(item)}>
-                          <FileText className="h-4 w-4" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleCreateDraft(item)}
+                          disabled={generatingDraftFor === item.id}
+                        >
+                          {generatingDraftFor === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Creer un brouillon</TooltipContent>
+                      <TooltipContent>Generer un brouillon IA</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger>
