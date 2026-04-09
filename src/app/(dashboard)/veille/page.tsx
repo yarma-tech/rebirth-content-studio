@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -27,6 +28,7 @@ import { toast } from "sonner"
 import type { VeilleItem } from "@/types"
 
 export default function VeillePage() {
+  const router = useRouter()
   const [items, setItems] = useState<VeilleItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -106,7 +108,9 @@ export default function VeillePage() {
         }),
       })
       if (!res.ok) throw new Error()
-      toast.success("Brouillon créé à partir du sujet de veille !")
+      const data = await res.json()
+      toast.success("Brouillon créé — redirection vers l'éditeur")
+      router.push(`/posts/${data.post.id}`)
     } catch {
       toast.error("Erreur")
     }
@@ -122,11 +126,9 @@ export default function VeillePage() {
           </p>
         </div>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
-          <DialogTrigger>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Ajouter un sujet
-            </Button>
+          <DialogTrigger className={buttonVariants()}>
+            <Plus className="h-4 w-4 mr-2" />
+            Ajouter un sujet
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -139,7 +141,7 @@ export default function VeillePage() {
               </div>
               <div>
                 <Label htmlFor="summary">Résumé</Label>
-                <Textarea id="summary" name="summary" className="mt-1" rows={3} />
+                <Textarea id="summary" name="summary" className="mt-1 max-h-[120px] overflow-y-auto resize-none" rows={3} />
               </div>
               <div>
                 <Label htmlFor="pme_angle">Angle PME</Label>

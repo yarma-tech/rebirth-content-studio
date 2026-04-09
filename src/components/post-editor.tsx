@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { LinkedInPreview } from "@/components/linkedin-preview"
-import { Sparkles, Save, Copy, Check, Loader2, Wand2 } from "lucide-react"
+import { Sparkles, Save, Copy, Check, Loader2, Wand2, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import type { Post, Pillar, PostStatus } from "@/types"
 import { PILLAR_LABELS, STATUS_LABELS } from "@/types"
@@ -34,6 +34,7 @@ export function PostEditor({ post, mode }: PostEditorProps) {
   const [hashtagsInput, setHashtagsInput] = useState(
     post?.hashtags?.join(", ") ?? ""
   )
+  const [scheduledAt, setScheduledAt] = useState(post?.scheduled_at ?? "")
   const [generating, setGenerating] = useState(false)
   const [improving, setImproving] = useState(false)
   const [improveInstruction, setImproveInstruction] = useState("")
@@ -44,7 +45,7 @@ export function PostEditor({ post, mode }: PostEditorProps) {
 
   const hashtags = hashtagsInput
     .split(",")
-    .map((h) => h.trim())
+    .map((h) => h.trim().replace(/^#/, ""))
     .filter(Boolean)
 
   const handleGenerate = useCallback(async () => {
@@ -126,9 +127,10 @@ export function PostEditor({ post, mode }: PostEditorProps) {
         title: title || null,
         content,
         pillar: pillar || null,
-        status,
+        status: scheduledAt ? "scheduled" as const : status,
         hashtags,
         ai_generated: post?.ai_generated ?? false,
+        scheduled_at: scheduledAt || null,
       }
       const url = mode === "create" ? "/api/posts" : `/api/posts/${post!.id}`
       const method = mode === "create" ? "POST" : "PATCH"
@@ -299,6 +301,53 @@ export function PostEditor({ post, mode }: PostEditorProps) {
               </Button>
             </div>
           )}
+
+          {/* Scheduling */}
+          <div className="p-4 border border-border rounded-lg space-y-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Label className="font-medium">Programmer la publication</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Input
+                type="datetime-local"
+                value={scheduledAt ? scheduledAt.slice(0, 16) : ""}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setScheduledAt(new Date(e.target.value).toISOString())
+                    setStatus("scheduled")
+                  } else {
+                    setScheduledAt("")
+                    if (status === "scheduled") setStatus("draft")
+                  }
+                }}
+                className="max-w-[250px]"
+              />
+              {scheduledAt && (
+                <button
+                  onClick={() => {
+                    setScheduledAt("")
+                    if (status === "scheduled") setStatus("draft")
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Annuler
+                </button>
+              )}
+            </div>
+            {scheduledAt && (
+              <p className="text-xs text-muted-foreground">
+                Programmé pour le{" "}
+                {new Date(scheduledAt).toLocaleDateString("fr-CA", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            )}
+          </div>
 
           <div>
             <Label htmlFor="hashtags">Hashtags (séparés par des virgules)</Label>
