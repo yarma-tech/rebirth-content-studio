@@ -15,6 +15,8 @@ const createPostSchema = z.object({
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get("status")
+  const from = searchParams.get("from")
+  const to = searchParams.get("to")
   const limit = parseInt(searchParams.get("limit") || "50")
 
   const supabase = getServiceClient()
@@ -27,6 +29,13 @@ export async function GET(request: NextRequest) {
 
   if (status) {
     query = query.eq("status", status)
+  }
+
+  if (from) {
+    query = query.gte("scheduled_at", from)
+  }
+  if (to) {
+    query = query.lte("scheduled_at", to)
   }
 
   const { data, error } = await query

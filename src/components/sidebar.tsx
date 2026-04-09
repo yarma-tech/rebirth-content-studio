@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileText,
   Eye,
+  CalendarDays,
   Settings,
   Sparkles,
   Menu,
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/veille", label: "Veille", icon: Eye },
+  { href: "/calendrier", label: "Calendrier", icon: CalendarDays },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ]
 

@@ -28,8 +28,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Eye, Plus, ExternalLink, Pencil, FileText, X } from "lucide-react"
+import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { formatDistanceToNow } from "date-fns"
+import { fr } from "date-fns/locale"
 import type { VeilleItem } from "@/types"
 
 function VeilleForm({
@@ -120,6 +122,9 @@ export default function VeillePage() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editingItem, setEditingItem] = useState<VeilleItem | null>(null)
+  const [filter, setFilter] = useState<"all" | "auto" | "manual">("all")
+  const [lastScan, setLastScan] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -136,7 +141,13 @@ export default function VeillePage() {
     }
   }, [])
 
-  useEffect(() => { loadItems() }, [loadItems])
+  useEffect(() => {
+    loadItems()
+    fetch("/api/veille/last-scan")
+      .then((r) => r.json())
+      .then((d) => { if (d.completed_at) setLastScan(d.completed_at) })
+      .catch(() => {})
+  }, [loadItems])
 
   const handleAdd = async (data: Record<string, unknown>) => {
     try {
@@ -170,6 +181,31 @@ export default function VeillePage() {
       toast.error("Erreur lors de la mise a jour")
     }
   }
+
+  const handleManualScan = async () => {
+    setScanning(true)
+    try {
+      const res = await fetch("/api/cron/veille")
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Scan termine : ${data.items_inserted} nouveaux sujets`)
+        setLastScan(new Date().toISOString())
+        loadItems()
+      } else {
+        toast.error("Erreur lors du scan")
+      }
+    } catch {
+      toast.error("Erreur de connexion")
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const filteredItems = items.filter((item) => {
+    if (filter === "auto") return (item as VeilleItem & { auto_detected?: boolean }).auto_detected === true
+    if (filter === "manual") return (item as VeilleItem & { auto_detected?: boolean }).auto_detected !== true
+    return true
+  })
 
   const handleDismiss = async (id: string) => {
     try {
@@ -211,25 +247,51 @@ export default function VeillePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Veille</h1>
           <p className="text-muted-foreground mt-1">
-            Sujets detectes pour ton contenu LinkedIn
+            {lastScan ? (
+              <>Dernier scan : {formatDistanceToNow(new Date(lastScan), { addSuffix: true, locale: fr })} — {items.filter((i) => (i as VeilleItem & { auto_detected?: boolean }).auto_detected).length} auto-detectes</>
+            ) : (
+              "Sujets detectes pour ton contenu LinkedIn"
+            )}
           </p>
         </div>
-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
-          <DialogTrigger className={buttonVariants()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Ajouter un sujet
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleManualScan} disabled={scanning}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${scanning ? "animate-spin" : ""}`} />
+            {scanning ? "Scan..." : "Scanner"}
+          </Button>
+          <Dialog open={showAdd} onOpenChange={setShowAdd}>
+            <DialogTrigger className={buttonVariants()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Ajouter
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Nouveau sujet de veille</DialogTitle>
             </DialogHeader>
             <VeilleForm onSubmit={handleAdd} submitLabel="Ajouter" />
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2">
+        {(["all", "auto", "manual"] as const).map((f) => (
+          <Button
+            key={f}
+            variant={filter === f ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter(f)}
+          >
+            {f === "all" && "Tous"}
+            {f === "auto" && <><Zap className="h-3.5 w-3.5 mr-1" />Auto</>}
+            {f === "manual" && <><User className="h-3.5 w-3.5 mr-1" />Manuel</>}
+          </Button>
+        ))}
       </div>
 
       {/* Edit dialog */}
@@ -265,13 +327,22 @@ export default function VeillePage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <Card key={item.id}>
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{item.title}</h3>
+                      {(item as VeilleItem & { auto_detected?: boolean }).auto_detected ? (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                          <Zap className="h-3 w-3 mr-0.5" />Auto
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">
+                          <User className="h-3 w-3 mr-0.5" />Manuel
+                        </Badge>
+                      )}
                       {item.relevance_score != null && (
                         <Badge variant="outline">
                           {Math.round(item.relevance_score * 100)}%
