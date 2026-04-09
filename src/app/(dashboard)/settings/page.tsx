@@ -1,16 +1,49 @@
 "use client"
 
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Database, Bot, Newspaper, Link2, Bell } from "lucide-react"
+import { Database, Bot, Newspaper, Link2, Bell, CheckCircle, AlertCircle } from "lucide-react"
+import { toast } from "sonner"
 
 export default function SettingsPage() {
   return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+function SettingsContent() {
+  const searchParams = useSearchParams()
+  const [linkedinStatus, setLinkedinStatus] = useState<{
+    connected: boolean
+    expired?: boolean
+    name?: string
+    expires_at?: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (searchParams.get("linkedin_connected")) {
+      toast.success("LinkedIn connecte avec succes !")
+    }
+    if (searchParams.get("linkedin_error")) {
+      toast.error(`Erreur LinkedIn : ${searchParams.get("linkedin_error")}`)
+    }
+
+    fetch("/api/linkedin/status")
+      .then((r) => r.json())
+      .then(setLinkedinStatus)
+      .catch(() => setLinkedinStatus({ connected: false }))
+  }, [searchParams])
+
+  return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Paramètres</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Parametres</h1>
         <p className="text-muted-foreground mt-1">
           Configuration de Rebirth Content Studio
         </p>
@@ -20,20 +53,74 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
+              <Link2 className="h-5 w-5 text-[#0A66C2]" />
+              <div>
+                <CardTitle className="text-base">LinkedIn API</CardTitle>
+                <CardDescription>Publication directe et analytics</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {linkedinStatus === null ? (
+              <p className="text-sm text-muted-foreground">Chargement...</p>
+            ) : linkedinStatus.connected ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm">
+                    Connecte en tant que <span className="font-medium">{linkedinStatus.name}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    Actif
+                  </Badge>
+                  {linkedinStatus.expires_at && (
+                    <span className="text-xs text-muted-foreground">
+                      Expire le {new Date(linkedinStatus.expires_at).toLocaleDateString("fr-CA")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {linkedinStatus.expired ? (
+                    <>
+                      <AlertCircle className="h-4 w-4 text-orange-500" />
+                      <span className="text-sm text-orange-600">Token expire — reconnecte-toi</span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Non connecte</span>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.location.href = "/api/auth/linkedin"}
+                >
+                  Connecter LinkedIn
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
               <Database className="h-5 w-5 text-primary" />
               <div>
-                <CardTitle className="text-base">Base de données Supabase</CardTitle>
-                <CardDescription>Connexion à votre instance Supabase</CardDescription>
+                <CardTitle className="text-base">Base de donnees Supabase</CardTitle>
+                <CardDescription>Connexion a votre instance Supabase</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                  Configuré via .env
-                </Badge>
-              </div>
+              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                Configure via .env
+              </Badge>
               <p className="text-sm text-muted-foreground">
                 Les credentials sont dans les variables d&apos;environnement
               </p>
@@ -47,38 +134,18 @@ export default function SettingsPage() {
               <Bot className="h-5 w-5 text-primary" />
               <div>
                 <CardTitle className="text-base">Agent IA (Claude)</CardTitle>
-                <CardDescription>Génération de contenu assistée par IA</CardDescription>
+                <CardDescription>Generation de contenu assistee par IA</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <Badge variant="secondary" className="bg-green-100 text-green-800">
-                Configuré via .env
+                Configure via .env
               </Badge>
               <p className="text-sm text-muted-foreground">
-                Modèle : Claude Sonnet 4
+                Modele : Claude Sonnet 4
               </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <Link2 className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle className="text-base">LinkedIn API</CardTitle>
-                <CardDescription>Publication directe et analytics</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <Badge variant="outline">Phase 3</Badge>
-              <Button variant="outline" size="sm" disabled>
-                Connecter LinkedIn
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -130,7 +197,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Serveur MCP</CardTitle>
           <CardDescription>
-            Point d&apos;entrée pour les agents IA externes
+            Point d&apos;entree pour les agents IA externes
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

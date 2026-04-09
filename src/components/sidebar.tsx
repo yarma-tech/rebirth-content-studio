@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 
 const NAV_ITEMS = [
@@ -93,10 +93,8 @@ export function MobileNav() {
         <span className="font-bold">Rebirth</span>
       </Link>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger>
-          <Button variant="ghost" size="icon">
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+        <SheetTrigger className={buttonVariants({ variant: "ghost", size: "icon" })}>
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-64">
           <SheetTitle className="sr-only">Navigation</SheetTitle>

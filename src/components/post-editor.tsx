@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { LinkedInPreview } from "@/components/linkedin-preview"
-import { Sparkles, Save, Copy, Check, Loader2, Wand2, Calendar } from "lucide-react"
+import { Sparkles, Save, Copy, Check, Loader2, Wand2, Calendar, Send } from "lucide-react"
 import { toast } from "sonner"
 import type { Post, Pillar, PostStatus } from "@/types"
 import { PILLAR_LABELS, STATUS_LABELS } from "@/types"
@@ -40,6 +40,7 @@ export function PostEditor({ post, mode }: PostEditorProps) {
   const [improveInstruction, setImproveInstruction] = useState("")
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [aiTopic, setAiTopic] = useState("")
 
@@ -174,6 +175,32 @@ export function PostEditor({ post, mode }: PostEditorProps) {
       toast.success("Post marqué comme publié !")
     } catch {
       toast.error("Erreur")
+    }
+  }, [post?.id])
+
+  const handlePublishLinkedIn = useCallback(async () => {
+    if (!post?.id) {
+      toast.error("Sauvegarde le post d'abord")
+      return
+    }
+    setPublishing(true)
+    try {
+      const res = await fetch("/api/linkedin/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: post.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Echec de la publication")
+        return
+      }
+      setStatus("published")
+      toast.success("Publié sur LinkedIn !")
+    } catch {
+      toast.error("Erreur de connexion")
+    } finally {
+      setPublishing(false)
     }
   }, [post?.id])
 
@@ -385,9 +412,23 @@ export function PostEditor({ post, mode }: PostEditorProps) {
               Copier
             </Button>
             {mode === "edit" && status !== "published" && (
-              <Button variant="secondary" onClick={handleMarkPublished}>
-                Marquer comme publié
-              </Button>
+              <>
+                <Button variant="secondary" onClick={handleMarkPublished}>
+                  Marquer comme publié
+                </Button>
+                <Button
+                  onClick={handlePublishLinkedIn}
+                  disabled={publishing || !content.trim()}
+                  className="bg-[#0A66C2] hover:bg-[#004182] text-white"
+                >
+                  {publishing ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Publier sur LinkedIn
+                </Button>
+              </>
             )}
           </div>
         </div>
