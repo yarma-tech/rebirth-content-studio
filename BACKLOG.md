@@ -14,12 +14,6 @@ _(vide — a definir lors de la prochaine session de planification)_
 
 ## Phase 4 — Contacts & Leads
 
-- [ ] **Page `/contacts`** — afficher la table `subscribers` avec colonnes : email, prenom, source, interets, statut, date d'inscription
-  - **Pourquoi** : permettre d'ajouter / visualiser / qualifier les contacts via l'UI au lieu de passer par SQL ou l'API REST. 2 contacts deja ajoutes manuellement en base (Anais, Billy).
-  - **Effort** : S — reutilise le pattern `<table>` deja en place sur `/veille` et `/newsletter`
-  - **Reference** : FR33 du PRD
-  - **Notes** : prevoir un bouton "Ajouter un contact" qui ouvre un Dialog (cf. pattern utilise sur `/veille`). Bonus : filtre par source / statut.
-
 - [ ] **Reponses newsletter dans le dashboard**
   - **Pourquoi** : centraliser le suivi des conversations qui demarrent apres l'envoi d'IA Friday
   - **Effort** : M — necessite probablement un webhook Resend pour capturer les replies, ou une integration IMAP
@@ -71,3 +65,4 @@ _(vide — a definir lors de la prochaine session de planification)_
 - ✅ Refonte page veille en tableau (1 ligne = 1 sujet, colonnes filtrees)
 - ✅ Modal de preview au clic sur une ligne de veille (backdrop blur)
 - ✅ Connexion Vercel ↔ GitHub (auto-deploy a chaque push sur `main`)
+- ✅ Page `/contacts` (FR33) — mini-CRM des subscribers (table, filtres, CRUD)

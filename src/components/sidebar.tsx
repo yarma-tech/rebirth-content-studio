@@ -9,10 +9,12 @@ import {
   Eye,
   CalendarDays,
   Newspaper,
+  Users,
   Settings,
   Sparkles,
   Menu,
   X,
+  CheckSquare,
 } from "lucide-react"
 import { useState } from "react"
 import { buttonVariants } from "@/components/ui/button"
@@ -24,6 +26,8 @@ const NAV_ITEMS = [
   { href: "/veille", label: "Veille", icon: Eye },
   { href: "/calendrier", label: "Calendrier", icon: CalendarDays },
   { href: "/newsletter", label: "Newsletter", icon: Newspaper },
+  { href: "/contacts", label: "Contacts", icon: Users },
+  { href: "/test", label: "Tests", icon: CheckSquare },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ]
 
