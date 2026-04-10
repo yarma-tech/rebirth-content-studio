@@ -97,3 +97,42 @@ export const STATUS_COLORS: Record<PostStatus, string> = {
   published: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   archived: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
+
+// Newsletter types
+export type SubscriberStatus = 'active' | 'unsubscribed' | 'bounced'
+export type NewsletterStatus = 'draft' | 'ready' | 'sending' | 'sent'
+
+export interface Subscriber {
+  id: string
+  email: string
+  first_name: string | null
+  interests: string[]
+  source: string
+  status: SubscriberStatus
+  subscribed_at: string
+  unsubscribed_at: string | null
+}
+
+export interface Newsletter {
+  id: string
+  subject: string
+  intro: string | null
+  content_html: string | null
+  content_json: Record<string, unknown> | null
+  status: NewsletterStatus
+  scheduled_at: string | null
+  sent_at: string | null
+  recipient_count: number
+  open_count: number
+  click_count: number
+  unsubscribe_count: number
+  created_at: string
+  updated_at: string
+}
+
+export const NEWSLETTER_STATUS_LABELS: Record<NewsletterStatus, string> = {
+  draft: 'Brouillon',
+  ready: 'Pret',
+  sending: 'En envoi',
+  sent: 'Envoye',
+}

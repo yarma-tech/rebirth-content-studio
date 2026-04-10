@@ -8,6 +8,7 @@ import {
   FileText,
   Eye,
   CalendarDays,
+  Newspaper,
   Settings,
   Sparkles,
   Menu,
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/veille", label: "Veille", icon: Eye },
   { href: "/calendrier", label: "Calendrier", icon: CalendarDays },
+  { href: "/newsletter", label: "Newsletter", icon: Newspaper },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ]
 
