@@ -24,6 +24,11 @@ _(vide — a definir lors de la prochaine session de planification)_
   - **Effort** : M — necessite ajouter une colonne `lead_status` (enum) a la table `subscribers` + UI de qualification + filtre
   - **Reference** : FR35 du PRD
 
+- [ ] **Popup de confirmation pour la suppression de contact** (UX)
+  - **Pourquoi** : actuellement la suppression utilise `window.confirm()` natif (peu lisible, pas dans le style du dashboard). Remplacer par un Dialog shadcn avec titre, description et bouton "Supprimer" en variant destructive.
+  - **Effort** : S — un Dialog avec etat `deletingItem` dans `src/app/(dashboard)/contacts/page.tsx`. Pattern proche de l'edit dialog deja en place.
+  - **Notes** : a generaliser eventuellement pour les autres suppressions (veille dismiss, posts archive, etc.) si on en fait un composant `ConfirmDialog` reutilisable.
+
 ---
 
 ## Phase 4 — Agent autonome & MCP
