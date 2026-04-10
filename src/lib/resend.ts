@@ -35,7 +35,7 @@ export async function sendNewsletterEmail(
   const fromEmail = process.env.NEWSLETTER_FROM_EMAIL || "onboarding@resend.dev"
 
   return resend.emails.send({
-    from: `IA Friday — Yannick Maillard <${fromEmail}>`,
+    from: `Yannick Maillard <${fromEmail}>`,
     to,
     subject,
     html,

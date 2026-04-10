@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { formatDistanceToNow } from "date-fns"
+import { formatDistanceToNow, format } from "date-fns"
 import { fr } from "date-fns/locale"
 import type { VeilleItem } from "@/types"
 
@@ -340,8 +340,8 @@ export default function VeillePage() {
       </Dialog>
 
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)}
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
         </div>
       ) : items.length === 0 ? (
         <Card>
@@ -354,42 +354,94 @@ export default function VeillePage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {filteredItems.map((item) => (
-            <Card key={item.id}>
-              <CardContent className="py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium">{item.title}</h3>
-                      {(item as VeilleItem & { auto_detected?: boolean }).auto_detected ? (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                          <Zap className="h-3 w-3 mr-0.5" />Auto
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">
-                          <User className="h-3 w-3 mr-0.5" />Manuel
-                        </Badge>
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="text-left px-4 py-3 font-medium">Sujet</th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Source</th>
+                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">Score</th>
+                <th className="text-center px-4 py-3 font-medium hidden lg:table-cell">Format</th>
+                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">Urgence</th>
+                <th className="text-right px-4 py-3 font-medium hidden lg:table-cell">Detecte</th>
+                <th className="text-right px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.map((item) => {
+                const isAuto = (item as VeilleItem & { auto_detected?: boolean }).auto_detected
+                return (
+                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    {/* Sujet */}
+                    <td className="px-4 py-3 max-w-md">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{item.title}</span>
+                        {isAuto ? (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs shrink-0">
+                            <Zap className="h-3 w-3 mr-0.5" />Auto
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            <User className="h-3 w-3 mr-0.5" />Manuel
+                          </Badge>
+                        )}
+                      </div>
+                      {item.summary && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.summary}</p>
                       )}
-                      {item.relevance_score != null && (
-                        <Badge variant="outline">
+                      {item.pme_angle && (
+                        <p className="text-xs mt-1 text-muted-foreground italic">
+                          <span className="font-medium not-italic">Angle :</span> {item.pme_angle}
+                        </p>
+                      )}
+                    </td>
+                    {/* Source */}
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {item.source_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">{item.source_name}</span>
+                          {item.source_url && (
+                            <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                    {/* Score */}
+                    <td className="px-4 py-3 text-center hidden sm:table-cell">
+                      {item.relevance_score != null ? (
+                        <Badge
+                          variant="outline"
+                          className={
+                            item.relevance_score >= 0.8
+                              ? "border-green-300 bg-green-50 text-green-700"
+                              : item.relevance_score >= 0.6
+                              ? "border-blue-300 bg-blue-50 text-blue-700"
+                              : item.relevance_score >= 0.4
+                              ? "border-yellow-300 bg-yellow-50 text-yellow-700"
+                              : "border-gray-300 bg-gray-50 text-gray-600"
+                          }
+                        >
                           {Math.round(item.relevance_score * 100)}%
                         </Badge>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
                       )}
-                    </div>
-                    {item.summary && (
-                      <p className="text-sm text-muted-foreground mt-1">{item.summary}</p>
-                    )}
-                    {item.pme_angle && (
-                      <p className="text-sm mt-1">
-                        <span className="font-medium">Angle PME :</span> {item.pme_angle}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2">
-                      {item.source_name && (
-                        <Badge variant="secondary">{item.source_name}</Badge>
+                    </td>
+                    {/* Format */}
+                    <td className="px-4 py-3 text-center hidden lg:table-cell">
+                      {item.suggested_format ? (
+                        <Badge variant="outline" className="capitalize">{item.suggested_format}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
                       )}
-                      {item.urgency && (
+                    </td>
+                    {/* Urgence */}
+                    <td className="px-4 py-3 text-center hidden sm:table-cell">
+                      {item.urgency ? (
                         <Badge
                           variant="secondary"
                           className={
@@ -402,66 +454,65 @@ export default function VeillePage() {
                         >
                           {item.urgency === "immediate" ? "Urgent" : item.urgency === "this_week" ? "Cette semaine" : "Backlog"}
                         </Badge>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
                       )}
-                      {item.suggested_format && (
-                        <Badge variant="outline">{item.suggested_format}</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {item.source_url && (
+                    </td>
+                    {/* Date */}
+                    <td className="px-4 py-3 text-right hidden lg:table-cell">
                       <Tooltip>
-                        <TooltipTrigger>
-                          <a
-                            href={item.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={buttonVariants({ variant: "ghost", size: "icon" })}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
+                        <TooltipTrigger className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(item.detected_at || item.created_at), { addSuffix: true, locale: fr })}
                         </TooltipTrigger>
-                        <TooltipContent>Ouvrir la source</TooltipContent>
+                        <TooltipContent>
+                          {format(new Date(item.detected_at || item.created_at), "dd/MM/yyyy HH:mm", { locale: fr })}
+                        </TooltipContent>
                       </Tooltip>
-                    )}
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Button variant="ghost" size="icon" onClick={() => setEditingItem(item)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Modifier le sujet</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleCreateDraft(item)}
-                          disabled={generatingDraftFor === item.id}
-                        >
-                          {generatingDraftFor === item.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <FileText className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Generer un brouillon IA</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Button variant="ghost" size="icon" onClick={() => handleDismiss(item.id)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Ecarter</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    </td>
+                    {/* Actions */}
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingItem(item)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Modifier</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleCreateDraft(item)}
+                              disabled={generatingDraftFor === item.id}
+                            >
+                              {generatingDraftFor === item.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Brouillon IA</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDismiss(item.id)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Ecarter</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
