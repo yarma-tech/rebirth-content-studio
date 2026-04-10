@@ -122,6 +122,7 @@ export default function VeillePage() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [editingItem, setEditingItem] = useState<VeilleItem | null>(null)
+  const [previewItem, setPreviewItem] = useState<VeilleItem | null>(null)
   const [filter, setFilter] = useState<"all" | "auto" | "manual">("all")
   const [lastScan, setLastScan] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
@@ -339,6 +340,116 @@ export default function VeillePage() {
         </DialogContent>
       </Dialog>
 
+      {/* Preview dialog */}
+      <Dialog open={!!previewItem} onOpenChange={(open) => { if (!open) setPreviewItem(null) }}>
+        <DialogContent
+          className="sm:max-w-2xl"
+          overlayClassName="bg-black/40 backdrop-blur-md supports-backdrop-filter:backdrop-blur-md"
+        >
+          {previewItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-base pr-6">{previewItem.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {/* Badges */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {previewItem.source_name && (
+                    <Badge variant="secondary">{previewItem.source_name}</Badge>
+                  )}
+                  {previewItem.relevance_score != null && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        previewItem.relevance_score >= 0.8
+                          ? "border-green-300 bg-green-50 text-green-700"
+                          : previewItem.relevance_score >= 0.6
+                          ? "border-blue-300 bg-blue-50 text-blue-700"
+                          : previewItem.relevance_score >= 0.4
+                          ? "border-yellow-300 bg-yellow-50 text-yellow-700"
+                          : "border-gray-300 bg-gray-50 text-gray-600"
+                      }
+                    >
+                      {Math.round(previewItem.relevance_score * 100)}%
+                    </Badge>
+                  )}
+                  {previewItem.urgency && (
+                    <Badge
+                      variant="secondary"
+                      className={
+                        previewItem.urgency === "immediate"
+                          ? "bg-red-100 text-red-800"
+                          : previewItem.urgency === "this_week"
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-gray-100 text-gray-600"
+                      }
+                    >
+                      {previewItem.urgency === "immediate" ? "Urgent" : previewItem.urgency === "this_week" ? "Cette semaine" : "Backlog"}
+                    </Badge>
+                  )}
+                  {previewItem.suggested_format && (
+                    <Badge variant="outline" className="capitalize">{previewItem.suggested_format}</Badge>
+                  )}
+                </div>
+
+                {/* Resume */}
+                {previewItem.summary && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resume</h4>
+                    <p className="text-sm leading-relaxed">{previewItem.summary}</p>
+                  </div>
+                )}
+
+                {/* Angle PME */}
+                {previewItem.pme_angle && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Angle PME</h4>
+                    <p className="text-sm leading-relaxed italic">{previewItem.pme_angle}</p>
+                  </div>
+                )}
+
+                {/* Date */}
+                <div className="text-xs text-muted-foreground">
+                  Detecte {formatDistanceToNow(new Date(previewItem.detected_at || previewItem.created_at), { addSuffix: true, locale: fr })}
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+                  {previewItem.source_url && (
+                    <a
+                      href={previewItem.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Ouvrir l'article
+                    </a>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      const item = previewItem
+                      setPreviewItem(null)
+                      handleCreateDraft(item)
+                    }}
+                    disabled={generatingDraftFor === previewItem.id}
+                  >
+                    {generatingDraftFor === previewItem.id ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-2" />
+                    )}
+                    Generer un brouillon IA
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -371,7 +482,11 @@ export default function VeillePage() {
               {filteredItems.map((item) => {
                 const isAuto = (item as VeilleItem & { auto_detected?: boolean }).auto_detected
                 return (
-                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={item.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => setPreviewItem(item)}
+                  >
                     {/* Sujet */}
                     <td className="px-4 py-3 max-w-md">
                       <div className="flex items-center gap-2">
@@ -387,16 +502,11 @@ export default function VeillePage() {
                         )}
                       </div>
                       {item.summary && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.summary}</p>
-                      )}
-                      {item.pme_angle && (
-                        <p className="text-xs mt-1 text-muted-foreground italic">
-                          <span className="font-medium not-italic">Angle :</span> {item.pme_angle}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{item.summary}</p>
                       )}
                     </td>
                     {/* Source */}
-                    <td className="px-4 py-3 hidden md:table-cell">
+                    <td className="px-4 py-3 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
                       {item.source_name ? (
                         <div className="flex items-center gap-1.5">
                           <span className="text-muted-foreground">{item.source_name}</span>
@@ -470,7 +580,7 @@ export default function VeillePage() {
                       </Tooltip>
                     </td>
                     {/* Actions */}
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-0.5">
                         <Tooltip>
                           <TooltipTrigger
