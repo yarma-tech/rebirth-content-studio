@@ -6,9 +6,10 @@ import { ThumbsUp, MessageCircle, Repeat2, Send } from "lucide-react"
 interface LinkedInPreviewProps {
   content: string
   hashtags?: string[]
+  mediaUrls?: string[]
 }
 
-export function LinkedInPreview({ content, hashtags = [] }: LinkedInPreviewProps) {
+export function LinkedInPreview({ content, hashtags = [], mediaUrls = [] }: LinkedInPreviewProps) {
   const charCount = content.length
   const isOptimal = charCount >= 800 && charCount <= 1300
 
@@ -45,6 +46,23 @@ export function LinkedInPreview({ content, hashtags = [] }: LinkedInPreviewProps
           </p>
         )}
       </div>
+
+      {/* Image */}
+      {mediaUrls.length > 0 && (
+        <div className="w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={mediaUrls[0]}
+            alt="Post image"
+            className="w-full object-cover max-h-[400px]"
+          />
+          {mediaUrls.length > 1 && (
+            <p className="text-xs text-muted-foreground px-4 py-1">
+              +{mediaUrls.length - 1} autre{mediaUrls.length > 2 ? "s" : ""} image{mediaUrls.length > 2 ? "s" : ""}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Engagement bar */}
       <div className="px-4 py-2 border-t border-border">

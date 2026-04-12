@@ -146,6 +146,47 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // 6.5 Notify urgent items (relevance_score > 0.8)
+  const urgentItems = scoredItems.filter((i) => i.relevance_score > 0.8)
+  if (urgentItems.length > 0) {
+    try {
+      const { notifyUrgentVeille } = await import("@/lib/telegram-notifications")
+      const { sendMessage } = await import("@/lib/telegram")
+
+      if (urgentItems.length <= 3) {
+        // Individual notifications for 1-3 urgent items
+        for (const item of urgentItems) {
+          const sourceName =
+            rawItems.find((r) => r.link === item.link)?.sourceName ?? null
+          await notifyUrgentVeille({
+            title: item.title,
+            summary: item.summary,
+            source_name: sourceName,
+            relevance_score: item.relevance_score,
+          })
+        }
+      } else {
+        // Grouped summary for 4+ urgent items (avoid spam)
+        const lines = [
+          `🔴 <b>${urgentItems.length} sujets chauds detectes</b>`,
+          "",
+          ...urgentItems.slice(0, 10).map((item) => {
+            const pct = Math.round(item.relevance_score * 100)
+            return `• <b>${item.title}</b> (${pct}%)`
+          }),
+          "",
+          "Va sur la veille pour les traiter.",
+        ]
+        await sendMessage(lines.join("\n"))
+      }
+    } catch (err) {
+      errors.push({
+        source: "Telegram notify",
+        error: String(err instanceof Error ? err.message : err).slice(0, 200),
+      })
+    }
+  }
+
   // 7. Log the scan
   await supabase.from("veille_scan_log").insert({
     started_at: startedAt.toISOString(),

@@ -8,6 +8,7 @@ const updatePostSchema = z.object({
   pillar: z.enum(["build_in_public", "vulgarisation", "retour_terrain"]).nullable().optional(),
   status: z.enum(["idea", "draft", "ready", "scheduled", "published", "archived"]).optional(),
   hashtags: z.array(z.string()).optional(),
+  media_urls: z.array(z.string().url()).optional(),
   scheduled_at: z.string().nullable().optional(),
   published_at: z.string().nullable().optional(),
   ai_generated: z.boolean().optional(),

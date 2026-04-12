@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { montrealToUtc, utcToMontreal } from "@/lib/timezone"
+import { format as formatDate } from "date-fns"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,6 +44,7 @@ export function PostEditor({ post, mode }: PostEditorProps) {
   const [copied, setCopied] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
+  const [mediaUrls] = useState<string[]>(post?.media_urls ?? [])
   const [aiTopic, setAiTopic] = useState("")
 
   const hashtags = hashtagsInput
@@ -338,10 +341,10 @@ export function PostEditor({ post, mode }: PostEditorProps) {
             <div className="flex items-center gap-3">
               <Input
                 type="datetime-local"
-                value={scheduledAt ? scheduledAt.slice(0, 16) : ""}
+                value={scheduledAt ? formatDate(utcToMontreal(scheduledAt), "yyyy-MM-dd'T'HH:mm") : ""}
                 onChange={(e) => {
                   if (e.target.value) {
-                    setScheduledAt(new Date(e.target.value).toISOString())
+                    setScheduledAt(montrealToUtc(e.target.value))
                     setStatus("scheduled")
                   } else {
                     setScheduledAt("")
@@ -365,13 +368,13 @@ export function PostEditor({ post, mode }: PostEditorProps) {
             {scheduledAt && (
               <p className="text-xs text-muted-foreground">
                 Programmé pour le{" "}
-                {new Date(scheduledAt).toLocaleDateString("fr-CA", {
+                {utcToMontreal(scheduledAt).toLocaleDateString("fr-CA", {
                   weekday: "long",
                   day: "numeric",
                   month: "long",
                   hour: "2-digit",
                   minute: "2-digit",
-                })}
+                })} (heure de Montréal)
               </p>
             )}
           </div>
@@ -448,7 +451,7 @@ export function PostEditor({ post, mode }: PostEditorProps) {
           </Button>
         </div>
         {showPreview && (
-          <LinkedInPreview content={content} hashtags={hashtags} />
+          <LinkedInPreview content={content} hashtags={hashtags} mediaUrls={mediaUrls} />
         )}
       </div>
     </div>

@@ -48,26 +48,143 @@ export async function saveVeilleSources(sources: VeilleSource[]): Promise<void> 
 }
 
 /**
- * Convert a YouTube channel URL to its RSS feed URL.
- * Supports formats:
- * - https://www.youtube.com/@handle
- * - https://www.youtube.com/channel/CHANNEL_ID
- * - https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID (passthrough)
+ * Convert a YouTube channel URL to its RSS feed URL (sync, no network).
+ * Supports: /channel/CHANNEL_ID, /feeds/videos.xml?channel_id=...
+ * Returns null for formats that need network (use resolveYoutubeUrl instead).
  */
 export function youtubeToRss(url: string): string | null {
-  // Already an RSS feed
   if (url.includes("/feeds/videos.xml")) return url
 
-  // Channel ID format
   const channelMatch = url.match(/youtube\.com\/channel\/([\w-]+)/)
   if (channelMatch) {
     return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`
   }
 
-  // Handle format - requires API lookup, return null (caller must resolve)
-  if (url.includes("youtube.com/@")) {
-    return null // Cannot resolve @handle to channel_id without API call
+  return null
+}
+
+interface YoutubeResolution {
+  rssUrl: string
+  suggestedName?: string
+}
+
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
+
+/**
+ * Resolve ANY YouTube URL to an RSS feed URL + optional channel name.
+ * Supports all formats:
+ * - /channel/CHANNEL_ID → direct (no network)
+ * - /feeds/videos.xml?channel_id=... → passthrough (no network)
+ * - /@handle → page fetch for channelId
+ * - /watch?v=VIDEO_ID → oEmbed for name + page fetch for channelId
+ * - youtu.be/VIDEO_ID → same as watch?v
+ */
+export async function resolveYoutubeUrl(
+  url: string
+): Promise<YoutubeResolution | null> {
+  // 1. Already RSS or /channel/ → sync conversion
+  const syncResult = youtubeToRss(url)
+  if (syncResult) return { rssUrl: syncResult }
+
+  // 2. Video URL (watch?v= or youtu.be/) → oEmbed + page fetch
+  const videoId = extractVideoId(url)
+  if (videoId) {
+    return resolveFromVideo(videoId)
+  }
+
+  // 3. @handle → page fetch
+  if (url.includes("/@")) {
+    return resolveFromPageFetch(url)
   }
 
   return null
+}
+
+// ─── Internal helpers ────────────────────────────────────────────────
+
+function extractVideoId(url: string): string | null {
+  // youtube.com/watch?v=VIDEO_ID
+  const watchMatch = url.match(/[?&]v=([\w-]{11})/)
+  if (watchMatch) return watchMatch[1]
+
+  // youtu.be/VIDEO_ID
+  const shortMatch = url.match(/youtu\.be\/([\w-]{11})/)
+  if (shortMatch) return shortMatch[1]
+
+  // youtube.com/shorts/VIDEO_ID
+  const shortsMatch = url.match(/youtube\.com\/shorts\/([\w-]{11})/)
+  if (shortsMatch) return shortsMatch[1]
+
+  return null
+}
+
+async function resolveFromVideo(
+  videoId: string
+): Promise<YoutubeResolution | null> {
+  // Strategy A: oEmbed (reliable public API, gives channel name)
+  let suggestedName: string | undefined
+
+  try {
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`
+    const oembedRes = await fetch(oembedUrl)
+    if (oembedRes.ok) {
+      const data = (await oembedRes.json()) as Record<string, string>
+      suggestedName = data.author_name || undefined
+    }
+  } catch {
+    // oEmbed failed, continue
+  }
+
+  // Strategy B: fetch the video page to extract channelId
+  const channelId = await extractChannelIdFromPage(
+    `https://www.youtube.com/watch?v=${videoId}`
+  )
+
+  if (channelId) {
+    return {
+      rssUrl: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
+      suggestedName,
+    }
+  }
+
+  return null
+}
+
+async function resolveFromPageFetch(
+  url: string
+): Promise<YoutubeResolution | null> {
+  const channelId = await extractChannelIdFromPage(url)
+  if (!channelId) return null
+
+  // Try to extract name from the page too
+  return {
+    rssUrl: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
+  }
+}
+
+async function extractChannelIdFromPage(
+  url: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": BROWSER_UA },
+      redirect: "follow",
+    })
+    if (!res.ok) return null
+
+    const html = await res.text()
+
+    // Pattern 1: "channelId":"UCxxxxxxx" (most reliable)
+    const jsonMatch = html.match(/"channelId"\s*:\s*"(UC[\w-]+)"/)
+    if (jsonMatch) return jsonMatch[1]
+
+    // Pattern 2: /channel/UCxxxxxxx in links
+    const linkMatch = html.match(/\/channel\/(UC[\w-]+)/)
+    if (linkMatch) return linkMatch[1]
+
+    return null
+  } catch {
+    return null
+  }
 }

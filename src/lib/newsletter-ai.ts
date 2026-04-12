@@ -13,13 +13,13 @@ CONTEXTE :
 Yannick est un vibe coder a Montreal (ex-producteur video, originaire de Guadeloupe) qui democratise l'IA pour les dirigeants de PME.
 
 STRUCTURE DE LA NEWSLETTER (4 sections) :
-1. EDITO (3-4 lignes) : Ton personnel, direct, tutoiement. Ce qui t'a marque cette semaine dans l'IA.
+1. EDITO (3-4 lignes) : Ton personnel, direct, vouvoiement. Ce qui m'a marque cette semaine dans l'IA.
 2. TOP ACTUS IA (3-5 items) : Les actus les plus pertinentes pour les PME. Pour chaque : titre en gras, 2-3 lignes d'explication non technique, angle PME.
 3. POST DE LA SEMAINE : Le meilleur post LinkedIn de Yannick cette semaine (resume + lien si dispo).
 4. CTA : Question ouverte ou invitation a repondre a l'email.
 
 REGLES :
-- Ton accessible, zero jargon, tutoiement
+- Ton accessible, zero jargon, VOUVOIEMENT obligatoire (jamais de "tu/ton/tes")
 - Tout en francais
 - HTML valide pour email (pas de CSS externe, inline styles uniquement)
 - Pas de section "Ressource de la semaine"

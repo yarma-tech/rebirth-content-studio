@@ -22,6 +22,7 @@ import {
   getDay,
 } from "date-fns"
 import { fr } from "date-fns/locale"
+import { utcToMontreal } from "@/lib/timezone"
 import type { Post, Pillar } from "@/types"
 import { PILLAR_LABELS, PILLAR_COLORS, STATUS_COLORS, STATUS_LABELS } from "@/types"
 
@@ -171,7 +172,7 @@ export default function CalendrierPage() {
                       </div>
                       {post.scheduled_at && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {format(new Date(post.scheduled_at), "HH:mm")}
+                          {format(utcToMontreal(post.scheduled_at), "HH:mm")}
                         </p>
                       )}
                     </Card>

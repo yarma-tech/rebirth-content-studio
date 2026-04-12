@@ -8,6 +8,7 @@ const createPostSchema = z.object({
   pillar: z.enum(["build_in_public", "vulgarisation", "retour_terrain"]).nullable().optional(),
   status: z.enum(["idea", "draft", "ready", "scheduled", "published", "archived"]).default("draft"),
   hashtags: z.array(z.string()).default([]),
+  media_urls: z.array(z.string().url()).default([]),
   ai_generated: z.boolean().default(false),
   scheduled_at: z.string().nullable().optional(),
 })
