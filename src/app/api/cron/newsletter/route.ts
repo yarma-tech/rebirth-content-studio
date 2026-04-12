@@ -10,8 +10,10 @@ export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   const isDev = process.env.NODE_ENV === "development"
 
-  if (!isDev && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!isDev) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
   }
 
   const supabase = getServiceClient()

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   // Auth check
   const authHeader = request.headers.get("authorization")
   const expectedToken = process.env.MCP_AUTH_TOKEN
-  if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+  if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
     return NextResponse.json(
       jsonRpcError(null, -32600, "Unauthorized"),
       { status: 401 }

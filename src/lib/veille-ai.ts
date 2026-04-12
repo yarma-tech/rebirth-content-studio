@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk"
+import { getAnthropicClient } from "@/lib/anthropic"
 
 export interface RawFeedItem {
   title: string
@@ -18,12 +18,6 @@ export interface ScoredItem {
   pme_angle: string | null
   urgency: "immediate" | "this_week" | "backlog"
   suggested_format: "post" | "video" | "both"
-}
-
-function getClient() {
-  return new Anthropic({
-    apiKey: process.env.REBIRTH_ANTHROPIC_KEY,
-  })
 }
 
 const SCORING_PROMPT = `Tu es un moteur de veille IA pour Yannick Maillard, qui cree du contenu LinkedIn pour les dirigeants de PME (1-50 salaries).
@@ -52,7 +46,7 @@ export async function scoreVeilleItems(items: RawFeedItem[]): Promise<ScoredItem
     .map((item, i) => `[${i}] "${item.title}" — ${item.description?.slice(0, 200) || "Pas de description"} (Source: ${item.sourceName}, ${item.sourceLanguage})`)
     .join("\n")
 
-  const client = getClient()
+  const client = getAnthropicClient()
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 4000,

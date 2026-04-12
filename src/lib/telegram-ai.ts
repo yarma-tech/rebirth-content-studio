@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk"
+import { getAnthropicClient } from "@/lib/anthropic"
 import { MCP_TOOLS, type MCPTool } from "@/lib/mcp/tools"
 import { getServiceClient } from "@/lib/supabase"
 import {
@@ -8,13 +9,7 @@ import {
   purgeOldMessages,
 } from "@/lib/telegram-memory"
 
-function getClient() {
-  return new Anthropic({
-    apiKey: process.env.REBIRTH_ANTHROPIC_KEY,
-  })
-}
-
-const DASHBOARD_URL = "https://rebirth-content-studio.vercel.app"
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || "https://rebirth-content-studio.vercel.app"
 
 function getSystemPrompt(): string {
   const now = new Date().toLocaleString("fr-CA", {
@@ -62,6 +57,10 @@ TOOLS A PRIVILEGIER :
   1. list_posts pour trouver le bon post
   2. get_post(id) pour lire le contenu complet
   3. Donne ton avis : accroche, structure, ton, longueur, CTA. Sois direct et constructif.
+- Pour PUBLIER sur LinkedIn ("publie", "poste-le", "mets en ligne", "lance-le") :
+  → publish_to_linkedin(post_id)
+  IMPORTANT : update_post(status:"published") ne publie PAS sur LinkedIn ! Il change juste le statut en base.
+  Seul publish_to_linkedin appelle l'API LinkedIn. Utilise list_posts pour trouver l'ID si besoin.
 - Pour modifier un post ("change le titre", "ajoute un hashtag", "reformule l'accroche", "mets en ready") :
   → update_post(id, {...champs a modifier})
   Si Yannick demande de reformuler/ameliorer le contenu, lis d'abord le post (get_post), redige la nouvelle version, puis update_post.
@@ -133,10 +132,11 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
   },
   {
     keywords: [
-      "post", "brouillon", "draft", "ecris", "genere", "redige", "publie",
+      "post", "brouillon", "draft", "ecris", "genere", "redige",
       "programme", "schedule", "planifie", "lundi", "mardi", "mercredi", "jeudi", "vendredi",
       "demain", "modifie", "change", "reformule", "ameliore", "titre", "hashtag",
       "lis", "montre", "avis", "relis", "contenu", "ready",
+      "publie", "poste", "linkedin", "en ligne", "lance",
     ],
     tools: [
       "list_posts",
@@ -144,6 +144,7 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
       "create_draft",
       "update_post",
       "generate_draft",
+      "publish_to_linkedin",
     ],
   },
   {
@@ -220,7 +221,7 @@ export async function processTelegramMessage(
   chatId: string,
   imageUrl?: string
 ): Promise<string> {
-  const client = getClient()
+  const client = getAnthropicClient()
 
   // 1. Purge old messages (fire-and-forget)
   purgeOldMessages(chatId).catch(() => {})

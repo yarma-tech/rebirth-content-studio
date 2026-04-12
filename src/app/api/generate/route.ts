@@ -17,6 +17,16 @@ const generateSchema = z.discriminatedUnion("mode", [
 ])
 
 export async function POST(request: NextRequest) {
+  // Block external requests (prevents unauthorized AI cost abuse)
+  const origin = request.headers.get("origin") || request.headers.get("referer") || ""
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001"
+  if (!origin.startsWith(appUrl)) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
   const body = await request.json()
   const parsed = generateSchema.safeParse(body)
 

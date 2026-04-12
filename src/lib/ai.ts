@@ -1,11 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { getAnthropicClient } from '@/lib/anthropic'
 import type { Pillar } from '@/types'
-
-function getClient() {
-  return new Anthropic({
-    apiKey: process.env.REBIRTH_ANTHROPIC_KEY,
-  })
-}
 
 const SYSTEM_PROMPT = `Tu es l'assistant éditorial de Yannick Maillard pour son contenu LinkedIn.
 
@@ -51,7 +45,7 @@ export async function generateDraft(
   pillar: Pillar,
   tone: string = 'accessible'
 ): Promise<ReadableStream> {
-  const response = await getClient().messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 1500,
     stream: true,
@@ -87,7 +81,7 @@ export async function improveDraft(
   content: string,
   instruction: string
 ): Promise<ReadableStream> {
-  const response = await getClient().messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 1500,
     stream: true,

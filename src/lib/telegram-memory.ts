@@ -214,6 +214,11 @@ function summarizeToolResult(toolName: string, rawResult: unknown): string {
       return `[cancel_reminder] ${data.message || "Rappel annulé"}`
     }
 
+    if (toolName === "publish_to_linkedin" && !Array.isArray(data)) {
+      if (!data.success) return `[publish_to_linkedin] Erreur : ${data.error}`
+      return `[publish_to_linkedin] Post "${data.post_title}" publié sur LinkedIn (ID: ${data.linkedin_post_id})`
+    }
+
     // Fallback: truncated JSON
     const json = JSON.stringify(data)
     return `[${toolName}] ${json.slice(0, 200)}${json.length > 200 ? "..." : ""}`

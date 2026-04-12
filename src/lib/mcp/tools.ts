@@ -510,4 +510,24 @@ export const MCP_TOOLS: MCPTool[] = [
       }
     },
   },
+  {
+    name: "publish_to_linkedin",
+    description:
+      "Publier un post sur LinkedIn via l'API LinkedIn. C'est la SEULE façon de publier réellement — update_post(status:'published') ne publie PAS sur LinkedIn, il ne fait que changer le statut en base. Utilise ce tool quand Yannick dit 'publie', 'poste-le', 'mets-le en ligne', 'lance-le sur LinkedIn'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        post_id: {
+          type: "string",
+          description: "ID UUID du post à publier",
+        },
+      },
+      required: ["post_id"],
+    },
+    handler: async (args) => {
+      const postId = z.string().uuid().parse(args.post_id)
+      const { publishToLinkedIn } = await import("@/lib/linkedin-publish")
+      return await publishToLinkedIn(postId)
+    },
+  },
 ]

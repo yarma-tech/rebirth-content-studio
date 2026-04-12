@@ -1,6 +1,6 @@
 const TELEGRAM_API = "https://api.telegram.org/bot"
 
-function getToken(): string {
+export function getToken(): string {
   return process.env.TELEGRAM_BOT_TOKEN || ""
 }
 

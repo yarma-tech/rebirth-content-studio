@@ -1,11 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk"
+import { getAnthropicClient } from "@/lib/anthropic"
 import type { VeilleItem, Post } from "@/types"
-
-function getClient() {
-  return new Anthropic({
-    apiKey: process.env.REBIRTH_ANTHROPIC_KEY,
-  })
-}
 
 const NEWSLETTER_PROMPT = `Tu generes la newsletter hebdomadaire "IA Friday" de Yannick Maillard.
 
@@ -37,7 +31,7 @@ export async function generateNewsletterDraft(
   veilleItems: VeilleItem[],
   publishedPosts: Post[]
 ): Promise<{ subject: string; intro: string; content_html: string }> {
-  const client = getClient()
+  const client = getAnthropicClient()
 
   const veilleContext = veilleItems
     .slice(0, 10)

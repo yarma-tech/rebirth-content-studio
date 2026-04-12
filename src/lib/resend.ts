@@ -11,7 +11,10 @@ function getResend() {
 }
 
 export function generateUnsubscribeToken(email: string): string {
-  const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || "fallback-secret"
+  const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET
+  if (!secret) {
+    throw new Error("NEWSLETTER_UNSUBSCRIBE_SECRET is not configured")
+  }
   return createHmac("sha256", secret).update(email).digest("hex")
 }
 
@@ -32,7 +35,10 @@ export async function sendNewsletterEmail(
   unsubscribeUrl: string
 ) {
   const resend = getResend()
-  const fromEmail = process.env.NEWSLETTER_FROM_EMAIL || "onboarding@resend.dev"
+  const fromEmail = process.env.NEWSLETTER_FROM_EMAIL
+  if (!fromEmail) {
+    throw new Error("NEWSLETTER_FROM_EMAIL is not configured")
+  }
 
   return resend.emails.send({
     from: `Yannick Maillard <${fromEmail}>`,

@@ -3,7 +3,7 @@ import { getServiceClient } from "@/lib/supabase"
 import { sendMessage } from "@/lib/telegram"
 import { getDashboardStats } from "@/lib/stats"
 
-const DASHBOARD_URL = "https://rebirth-content-studio.vercel.app"
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || "https://rebirth-content-studio.vercel.app"
 
 export async function GET(request: NextRequest) {
   // Auth check
@@ -11,8 +11,10 @@ export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   const isDev = process.env.NODE_ENV === "development"
 
-  if (!isDev && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!isDev) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
   }
 
   const supabase = getServiceClient()
@@ -259,13 +261,14 @@ function computeNextSchedule(
   currentSchedule: string,
   frequency: string
 ): string {
-  const current = new Date(currentSchedule)
+  const now = new Date()
+  const next = new Date(currentSchedule)
+  const incrementDays = frequency === "weekly" ? 7 : 1
 
-  if (frequency === "daily") {
-    current.setDate(current.getDate() + 1)
-  } else if (frequency === "weekly") {
-    current.setDate(current.getDate() + 7)
+  // Advance until the next occurrence is in the future
+  while (next <= now) {
+    next.setDate(next.getDate() + incrementDays)
   }
 
-  return current.toISOString()
+  return next.toISOString()
 }

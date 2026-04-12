@@ -17,8 +17,10 @@ export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   const isDev = process.env.NODE_ENV === "development"
 
-  if (!isDev && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!isDev) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
   }
 
   const startedAt = new Date()
@@ -105,23 +107,29 @@ export async function GET(request: NextRequest) {
   // 6. Insert scored items
   let insertedCount = 0
   if (scoredItems.length > 0) {
-    const rows = scoredItems.map((item) => ({
-      title: item.title,
-      summary: item.summary,
-      pme_angle: item.pme_angle,
-      source_url: item.link,
-      source_name: rawItems.find((r) => r.link === item.link)?.sourceName || null,
-      suggested_format: item.suggested_format,
-      urgency: item.urgency,
-      relevance_score: item.relevance_score,
-      status: "new" as const,
-      auto_detected: true,
-      raw_data: {
-        original_title: item.title,
-        pub_date: rawItems.find((r) => r.link === item.link)?.pubDate,
-        source_category: rawItems.find((r) => r.link === item.link)?.sourceCategory,
-      },
-    }))
+    // Index raw items by link for O(1) lookups instead of O(n) find()
+    const rawItemsByLink = new Map(rawItems.map((r) => [r.link, r]))
+
+    const rows = scoredItems.map((item) => {
+      const raw = rawItemsByLink.get(item.link)
+      return {
+        title: item.title,
+        summary: item.summary,
+        pme_angle: item.pme_angle,
+        source_url: item.link,
+        source_name: raw?.sourceName || null,
+        suggested_format: item.suggested_format,
+        urgency: item.urgency,
+        relevance_score: item.relevance_score,
+        status: "new" as const,
+        auto_detected: true,
+        raw_data: {
+          original_title: item.title,
+          pub_date: raw?.pubDate,
+          source_category: raw?.sourceCategory,
+        },
+      }
+    })
 
     const { data: inserted, error: insertError } = await supabase
       .from("veille_items")
