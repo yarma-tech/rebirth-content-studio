@@ -97,16 +97,27 @@ export const MCP_TOOLS: MCPTool[] = [
   },
   {
     name: "update_post",
-    description: "Modifier un post LinkedIn existant (contenu, statut, pilier, hashtags)",
+    description:
+      "Modifier un post LinkedIn existant. Supporte TOUS les champs : contenu, statut, pilier, hashtags, date de programmation (scheduled_at), et images (media_urls). Pour programmer un post : passe status='scheduled' ET scheduled_at='ISO8601'. Pour changer l'heure de programmation : passe juste scheduled_at.",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string" },
+        id: { type: "string", description: "ID UUID du post" },
         title: { type: "string" },
         content: { type: "string" },
         pillar: { type: "string", enum: ["build_in_public", "vulgarisation", "retour_terrain"] },
         status: { type: "string", enum: ["idea", "draft", "ready", "scheduled", "published", "archived"] },
         hashtags: { type: "array", items: { type: "string" } },
+        scheduled_at: {
+          type: "string",
+          description:
+            "Date/heure ISO 8601 pour la programmation (fuseau UTC). Convertir depuis Montreal (UTC-4 EDT / UTC-5 EST). Ex: 9h45 Montreal EDT = 13:45 UTC → '2026-04-12T13:45:00Z'",
+        },
+        media_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tableau d'URLs d'images (Supabase Storage). Remplace le tableau existant.",
+        },
       },
       required: ["id"],
     },
@@ -118,6 +129,8 @@ export const MCP_TOOLS: MCPTool[] = [
       if (args.pillar !== undefined) updates.pillar = args.pillar
       if (args.status !== undefined) updates.status = args.status
       if (args.hashtags !== undefined) updates.hashtags = args.hashtags
+      if (args.scheduled_at !== undefined) updates.scheduled_at = args.scheduled_at
+      if (args.media_urls !== undefined) updates.media_urls = args.media_urls
 
       const supabase = getServiceClient()
       const { data, error } = await supabase
@@ -507,6 +520,41 @@ export const MCP_TOOLS: MCPTool[] = [
       return {
         success: true,
         message: `Rappel "${data.action_type}" annulé.`,
+      }
+    },
+  },
+  {
+    name: "delete_post",
+    description:
+      "Supprimer un post LinkedIn par son ID. Action irréversible. Demande confirmation à Yannick avant de supprimer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID UUID du post à supprimer" },
+      },
+      required: ["id"],
+    },
+    handler: async (args) => {
+      const id = z.string().uuid().parse(args.id)
+      const supabase = getServiceClient()
+
+      // Fetch title for confirmation message
+      const { data: post } = await supabase
+        .from("posts")
+        .select("id, title")
+        .eq("id", id)
+        .single()
+
+      if (!post) {
+        return { error: true, message: "Post non trouvé." }
+      }
+
+      const { error } = await supabase.from("posts").delete().eq("id", id)
+      if (error) throw new Error(error.message)
+
+      return {
+        success: true,
+        message: `Post "${post.title || "Sans titre"}" supprimé.`,
       }
     },
   },

@@ -32,8 +32,10 @@ Tu peux :
 - Lister les posts par statut
 - Lire un brouillon et donner ton avis dessus
 - Modifier le contenu, titre, hashtags ou pilier d'un post
-- Programmer un post (date + heure)
-- Attacher une image a un post (brouillon ou programme)
+- Programmer un post (date + heure) ET modifier l'heure de programmation
+- Publier un post sur LinkedIn (avec image si attachee)
+- Supprimer un post
+- Attacher/retirer une image d'un post
 - Programmer des rappels (stats, veille, resume, ou texte libre — unique, quotidien, hebdomadaire)
 - Consulter la veille recente
 - Ajouter une source de veille (RSS ou YouTube)
@@ -69,6 +71,16 @@ TOOLS A PRIVILEGIER :
   Interprete les dates relatives (demain, lundi, etc.) par rapport a la date du jour.
   Fuseau horaire par defaut : America/Montreal (ET).
   Si l'heure n'est pas precisee, utilise 9h00 ET.
+  IMPORTANT : scheduled_at DOIT etre en UTC. Convertis Montreal → UTC (+4h EDT / +5h EST).
+  Ex: "9h45 Montreal" en EDT = "13:45 UTC" → scheduled_at: "2026-04-12T13:45:00Z"
+- Pour MODIFIER l'heure de programmation ("change pour 10h", "decale a 14h") :
+  → update_post(id, { scheduled_at: "nouvelle-heure-ISO8601-UTC" })
+  Pas besoin de repasser status si le post est deja "scheduled".
+- Pour supprimer un post ("supprime ce post", "efface-le") :
+  → delete_post(id)
+  Demande TOUJOURS confirmation avant de supprimer. Action irreversible.
+- Pour retirer une image d'un post ("enleve l'image", "retire la photo") :
+  → get_post(id) pour lire media_urls, puis update_post(id, { media_urls: [...sans l'image] })
 - Pour programmer un rappel ("lundi matin envoie-moi les stats", "chaque mardi soir les 3 meilleurs sujets veille") :
   → create_reminder(action_type, scheduled_at, frequency, action_params)
   Convertis l'heure Montreal en UTC (+4h EDT / +5h EST) AVANT d'appeler le tool.
@@ -123,8 +135,8 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
     tools: ["create_reminder", "list_reminders", "cancel_reminder"],
   },
   {
-    keywords: ["image", "photo", "attache", "illustration", "visuel", "Photo reçue"],
-    tools: ["attach_image_to_post", "list_posts", "get_post"],
+    keywords: ["image", "photo", "attache", "illustration", "visuel", "Photo reçue", "enleve", "retire", "supprime image"],
+    tools: ["attach_image_to_post", "list_posts", "get_post", "update_post"],
   },
   {
     keywords: ["stats", "chiffre", "metrique", "combien", "impression", "performance"],
@@ -145,6 +157,7 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
       "update_post",
       "generate_draft",
       "publish_to_linkedin",
+      "delete_post",
     ],
   },
   {
@@ -188,6 +201,8 @@ function compactToolResult(
           title: p.title,
           status: p.status,
           pillar: p.pillar,
+          scheduled_at: p.scheduled_at || null,
+          media_count: Array.isArray(p.media_urls) ? p.media_urls.length : 0,
           created_at: p.created_at,
         }))
       )
