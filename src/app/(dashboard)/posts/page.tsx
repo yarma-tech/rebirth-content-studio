@@ -16,8 +16,9 @@ import {
 import { Plus, FileText } from "lucide-react"
 import type { Post, PostStatus } from "@/types"
 import { STATUS_LABELS, STATUS_COLORS, PILLAR_LABELS, PILLAR_COLORS } from "@/types"
-import { formatDistanceToNow } from "date-fns"
+import { formatDistanceToNow, format } from "date-fns"
 import { fr } from "date-fns/locale"
+import { utcToMontreal } from "@/lib/timezone"
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([])
@@ -121,6 +122,16 @@ export default function PostsPage() {
                       {post.ai_generated && (
                         <Badge variant="outline" className="text-xs">
                           IA
+                        </Badge>
+                      )}
+                      {post.scheduled_at && (
+                        <Badge variant="outline" className="text-xs">
+                          {format(utcToMontreal(post.scheduled_at), "d MMM HH:mm", { locale: fr })}
+                        </Badge>
+                      )}
+                      {post.media_urls && post.media_urls.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {post.media_urls.length} image{post.media_urls.length > 1 ? "s" : ""}
                         </Badge>
                       )}
                     </div>
