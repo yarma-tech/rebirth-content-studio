@@ -11,6 +11,7 @@ const createPostSchema = z.object({
   media_urls: z.array(z.string().url()).default([]),
   ai_generated: z.boolean().default(false),
   scheduled_at: z.string().nullable().optional(),
+  source_veille_id: z.string().uuid().nullable().optional(),
 })
 
 export async function GET(request: NextRequest) {

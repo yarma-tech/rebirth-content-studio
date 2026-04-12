@@ -12,6 +12,7 @@ const updateSchema = z.object({
   urgency: z.enum(["immediate", "this_week", "backlog"]).optional(),
   relevance_score: z.number().min(0).max(1).nullable().optional(),
   status: z.enum(["new", "reviewed", "used", "dismissed"]).optional(),
+  used_in_post_id: z.string().uuid().nullable().optional(),
 })
 
 export async function PATCH(

@@ -37,6 +37,7 @@ export interface VeilleItem {
   relevance_score: number | null
   status: VeilleStatus
   used_in_post_id: string | null
+  auto_detected: boolean
   raw_data: Record<string, unknown> | null
   detected_at: string
   created_at: string

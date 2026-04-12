@@ -91,26 +91,16 @@ export default function NewsletterEditorPage() {
   const handleRegenerate = async () => {
     setRegenerating(true)
     try {
-      const res = await fetch("/api/newsletter", {
-        method: "POST",
+      const res = await fetch(`/api/newsletter/${params.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_generate: true }),
+        body: JSON.stringify({ regenerate: true }),
       })
       if (!res.ok) throw new Error()
       const data = await res.json()
       setSubject(data.newsletter.subject)
-      setIntro(data.newsletter.intro)
-      setContentHtml(data.newsletter.content_html)
-      await fetch(`/api/newsletter/${params.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: data.newsletter.subject,
-          intro: data.newsletter.intro,
-          content_html: data.newsletter.content_html,
-        }),
-      })
-      await fetch(`/api/newsletter/${data.newsletter.id}`, { method: "DELETE" })
+      setIntro(data.newsletter.intro || "")
+      setContentHtml(data.newsletter.content_html || "")
       toast.success("Contenu regenere !")
     } catch {
       toast.error("Erreur de regeneration")

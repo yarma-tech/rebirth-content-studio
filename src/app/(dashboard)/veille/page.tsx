@@ -203,8 +203,8 @@ export default function VeillePage() {
   }
 
   const filteredItems = items.filter((item) => {
-    if (filter === "auto") return (item as VeilleItem & { auto_detected?: boolean }).auto_detected === true
-    if (filter === "manual") return (item as VeilleItem & { auto_detected?: boolean }).auto_detected !== true
+    if (filter === "auto") return item.auto_detected === true
+    if (filter === "manual") return item.auto_detected !== true
     return true
   })
 
@@ -265,6 +265,14 @@ export default function VeillePage() {
       })
       if (!postRes.ok) throw new Error("Erreur sauvegarde")
       const data = await postRes.json()
+
+      // 3. Link veille item to the new post
+      await fetch(`/api/veille/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "used", used_in_post_id: data.post.id }),
+      }).catch(() => {}) // non-blocking
+
       toast.success("Brouillon IA genere !")
       router.push(`/posts/${data.post.id}`)
     } catch {
@@ -281,7 +289,7 @@ export default function VeillePage() {
           <h1 className="text-3xl font-bold tracking-tight">Veille</h1>
           <p className="text-muted-foreground mt-1">
             {lastScan ? (
-              <>Dernier scan : {formatDistanceToNow(new Date(lastScan), { addSuffix: true, locale: fr })} — {items.filter((i) => (i as VeilleItem & { auto_detected?: boolean }).auto_detected).length} auto-detectes</>
+              <>Dernier scan : {formatDistanceToNow(new Date(lastScan), { addSuffix: true, locale: fr })} — {items.filter((i) => i.auto_detected).length} auto-detectes</>
             ) : (
               "Sujets detectes pour ton contenu LinkedIn"
             )}
@@ -480,7 +488,7 @@ export default function VeillePage() {
             </thead>
             <tbody>
               {filteredItems.map((item) => {
-                const isAuto = (item as VeilleItem & { auto_detected?: boolean }).auto_detected
+                const isAuto = item.auto_detected
                 return (
                   <tr
                     key={item.id}
