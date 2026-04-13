@@ -123,9 +123,10 @@ export async function POST(request: NextRequest) {
     )
     await sendMessage(response, String(chatId))
   } catch (err) {
-    console.error("[telegram] AI error:", err)
+    const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    console.error("[telegram] AI error:", errMsg, err)
     await sendMessage(
-      "⚠️ Erreur lors du traitement. Reessaie dans quelques secondes.",
+      `⚠️ Erreur lors du traitement: ${errMsg.slice(0, 200)}`,
       String(chatId)
     )
   }
