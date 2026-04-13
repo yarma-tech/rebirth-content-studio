@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getAnthropicClient } from "@/lib/anthropic"
 import { MCP_TOOLS, type MCPTool } from "@/lib/mcp/tools"
 import { getServiceClient } from "@/lib/supabase"
+import { buildDynamicContext } from "@/lib/agent-context"
 import {
   saveMessage,
   saveToolSummary,
@@ -9,20 +10,42 @@ import {
   purgeOldMessages,
 } from "@/lib/telegram-memory"
 
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1500
+
+async function callClaudeWithRetry(
+  fn: () => Promise<Anthropic.Message>
+): Promise<Anthropic.Message> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      const isRetryable =
+        err instanceof Error &&
+        (err.message.includes("overloaded") || err.message.includes("529") || err.message.includes("rate_limit"))
+      if (!isRetryable || attempt === MAX_RETRIES) throw err
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)))
+    }
+  }
+  throw new Error("Echec apres plusieurs tentatives")
+}
+
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || "https://rebirth-content-studio.vercel.app"
 
-function getSystemPrompt(): string {
+async function getTelegramSystemPrompt(): Promise<string> {
   const now = new Date().toLocaleString("fr-CA", {
     timeZone: "America/Montreal",
     dateStyle: "full",
     timeStyle: "short",
   })
 
+  const dynamicContext = await buildDynamicContext("telegram")
+
   return `Tu es l'assistant Telegram de Yannick Maillard pour Rebirth Content Studio.
 
 DATE ET HEURE : ${now} (fuseau America/Montreal, UTC-4 en EDT, UTC-5 en EST)
 
-Yannick est un vibe coder a Montreal qui cree du contenu LinkedIn pour democratiser l'IA pour les PME.
+${dynamicContext}
 
 Tu as acces a l'historique recent de la conversation. Utilise-le pour comprendre le contexte ("le premier", "celui-la", "modifie-le", etc.).
 
@@ -178,6 +201,10 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
     keywords: ["resume", "point", "aujourd", "recap", "bilan"],
     tools: ["get_daily_summary", "list_veille_items", "get_stats"],
   },
+  {
+    keywords: ["profil", "qui es-tu", "qui tu es", "ton role", "strategie", "memoire", "souviens", "retiens", "evite"],
+    tools: ["get_agent_profile", "update_agent_memory"],
+  },
 ]
 
 function selectTools(messageText: string): MCPTool[] {
@@ -289,13 +316,17 @@ export async function processTelegramMessage(
     messages.push({ role: "user", content: messageForHistory })
   }
 
-  let response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 400,
-    system: getSystemPrompt(),
-    tools,
-    messages,
-  })
+  const systemPrompt = await getTelegramSystemPrompt()
+
+  let response = await callClaudeWithRetry(() =>
+    client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 400,
+      system: systemPrompt,
+      tools,
+      messages,
+    })
+  )
 
   // 6. Tool use loop (max 3 iterations)
   let iterations = 0
@@ -346,13 +377,15 @@ export async function processTelegramMessage(
     messages.push({ role: "assistant", content: response.content })
     messages.push({ role: "user", content: toolResults })
 
-    response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      system: getSystemPrompt(),
-      tools,
-      messages,
-    })
+    response = await callClaudeWithRetry(() =>
+      client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 400,
+        system: systemPrompt,
+        tools,
+        messages,
+      })
+    )
   }
 
   // 7. Extract final text response
