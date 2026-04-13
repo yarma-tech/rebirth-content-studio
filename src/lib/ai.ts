@@ -1,6 +1,49 @@
 import { getAnthropicClient } from '@/lib/anthropic'
 import type { Pillar } from '@/types'
 
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1000
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnthropicStream = AsyncIterable<any>
+
+async function callWithRetry(
+  fn: () => Promise<AnthropicStream>
+): Promise<AnthropicStream> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      const isRetryable =
+        err instanceof Error &&
+        (err.message.includes('overloaded') || err.message.includes('rate_limit') || err.message.includes('529'))
+      if (!isRetryable || attempt === MAX_RETRIES) throw err
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)))
+    }
+  }
+  throw new Error('Echec apres plusieurs tentatives')
+}
+
+function streamFromResponse(response: AnthropicStream): ReadableStream {
+  const encoder = new TextEncoder()
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const event of response) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            controller.enqueue(encoder.encode(event.delta.text))
+          }
+        }
+        controller.close()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erreur de generation'
+        controller.enqueue(encoder.encode(`\n\n[ERREUR: ${msg}]`))
+        controller.close()
+      }
+    },
+  })
+}
+
 const SYSTEM_PROMPT = `Tu es l'assistant éditorial de Yannick Maillard pour son contenu LinkedIn.
 
 QUI EST YANNICK :
@@ -45,51 +88,43 @@ export async function generateDraft(
   pillar: Pillar,
   tone: string = 'accessible'
 ): Promise<ReadableStream> {
-  const response = await getAnthropicClient().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1500,
-    stream: true,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `Génère un post LinkedIn sur le pilier "${pillar}".
+  const response = await callWithRetry(() =>
+    getAnthropicClient().messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      stream: true,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Génère un post LinkedIn sur le pilier "${pillar}".
 
 Sujet/idée : ${topic}
 Ton souhaité : ${tone}
 
 Génère UNIQUEMENT le post LinkedIn (accroche + corps + CTA + hashtags). Pas de commentaire ni d'explication avant ou après.`,
-      },
-    ],
-  })
+        },
+      ],
+    })
+  )
 
-  const encoder = new TextEncoder()
-
-  return new ReadableStream({
-    async start(controller) {
-      for await (const event of response) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          controller.enqueue(encoder.encode(event.delta.text))
-        }
-      }
-      controller.close()
-    },
-  })
+  return streamFromResponse(response)
 }
 
 export async function improveDraft(
   content: string,
   instruction: string
 ): Promise<ReadableStream> {
-  const response = await getAnthropicClient().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1500,
-    stream: true,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `Voici un brouillon de post LinkedIn :
+  const response = await callWithRetry(() =>
+    getAnthropicClient().messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      stream: true,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Voici un brouillon de post LinkedIn :
 
 ---
 ${content}
@@ -98,20 +133,10 @@ ${content}
 Instruction d'amélioration : ${instruction}
 
 Génère UNIQUEMENT la version améliorée du post. Pas de commentaire ni d'explication.`,
-      },
-    ],
-  })
+        },
+      ],
+    })
+  )
 
-  const encoder = new TextEncoder()
-
-  return new ReadableStream({
-    async start(controller) {
-      for await (const event of response) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          controller.enqueue(encoder.encode(event.delta.text))
-        }
-      }
-      controller.close()
-    },
-  })
+  return streamFromResponse(response)
 }
