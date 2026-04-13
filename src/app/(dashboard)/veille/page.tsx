@@ -28,7 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw, Loader2 } from "lucide-react"
+import { Eye, Plus, ExternalLink, Pencil, FileText, X, Zap, User, RefreshCw, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -124,13 +124,21 @@ export default function VeillePage() {
   const [editingItem, setEditingItem] = useState<VeilleItem | null>(null)
   const [previewItem, setPreviewItem] = useState<VeilleItem | null>(null)
   const [filter, setFilter] = useState<"all" | "auto" | "manual">("all")
+  const [urgencyFilter, setUrgencyFilter] = useState<"all" | "this_week" | "backlog">("all")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortKey, setSortKey] = useState<string>("detected_at")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [dismissingBatch, setDismissingBatch] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 50
   const [lastScan, setLastScan] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
 
   const loadItems = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/veille?limit=50")
+      const res = await fetch("/api/veille?limit=500")
       if (res.ok) {
         const data = await res.json()
         setItems(data.items || [])
@@ -202,11 +210,64 @@ export default function VeillePage() {
     }
   }
 
-  const filteredItems = items.filter((item) => {
-    if (filter === "auto") return item.auto_detected === true
-    if (filter === "manual") return item.auto_detected !== true
-    return true
-  })
+  const filteredItems = (() => {
+    let result = items
+
+    // Filtre auto/manuel
+    if (filter === "auto") result = result.filter((i) => i.auto_detected === true)
+    else if (filter === "manual") result = result.filter((i) => i.auto_detected !== true)
+
+    // Filtre urgence
+    if (urgencyFilter !== "all") result = result.filter((i) => i.urgency === urgencyFilter)
+
+    // Recherche
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((i) =>
+        (i.title && i.title.toLowerCase().includes(q)) ||
+        (i.summary && i.summary.toLowerCase().includes(q)) ||
+        (i.source_name && i.source_name.toLowerCase().includes(q)) ||
+        (i.pme_angle && i.pme_angle.toLowerCase().includes(q))
+      )
+    }
+
+    // Tri
+    const urgencyOrder: Record<string, number> = { immediate: 0, this_week: 1, backlog: 2 }
+    result = [...result].sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case "title":
+          cmp = (a.title || "").localeCompare(b.title || "")
+          break
+        case "source_name":
+          cmp = (a.source_name || "").localeCompare(b.source_name || "")
+          break
+        case "relevance_score":
+          cmp = (a.relevance_score ?? -1) - (b.relevance_score ?? -1)
+          break
+        case "suggested_format":
+          cmp = (a.suggested_format || "").localeCompare(b.suggested_format || "")
+          break
+        case "urgency":
+          cmp = (urgencyOrder[a.urgency || "backlog"] ?? 3) - (urgencyOrder[b.urgency || "backlog"] ?? 3)
+          break
+        case "detected_at":
+        default:
+          cmp = new Date(a.detected_at || a.created_at).getTime() - new Date(b.detected_at || b.created_at).getTime()
+          break
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+
+    return result
+  })()
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const paginatedItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // Reset page quand filtres changent
+  useEffect(() => { setCurrentPage(1) }, [filter, urgencyFilter, searchQuery, sortKey, sortDir])
 
   const handleDismiss = async (id: string) => {
     try {
@@ -221,6 +282,62 @@ export default function VeillePage() {
     } catch {
       toast.error("Erreur")
     }
+  }
+
+  const handleBatchDismiss = async () => {
+    if (selectedIds.size === 0) return
+    setDismissingBatch(true)
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/veille/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "dismissed" }),
+          })
+        )
+      )
+      setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
+      toast.success(`${selectedIds.size} sujet(s) ecarte(s)`)
+      setSelectedIds(new Set())
+    } catch {
+      toast.error("Erreur lors de la suppression")
+    } finally {
+      setDismissingBatch(false)
+    }
+  }
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDir(key === "detected_at" ? "desc" : "asc")
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedItems.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(paginatedItems.map((i) => i.id)))
+    }
+  }
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortKey !== column) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1" />
   }
 
   const [generatingDraftFor, setGeneratingDraftFor] = useState<string | null>(null)
@@ -315,21 +432,55 @@ export default function VeillePage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        {(["all", "auto", "manual"] as const).map((f) => (
-          <Button
-            key={f}
-            variant={filter === f ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter(f)}
-          >
-            {f === "all" && "Tous"}
-            {f === "auto" && <><Zap className="h-3.5 w-3.5 mr-1" />Auto</>}
-            {f === "manual" && <><User className="h-3.5 w-3.5 mr-1" />Manuel</>}
-          </Button>
-        ))}
+      {/* Filters + Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          {(["all", "auto", "manual"] as const).map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(f)}
+            >
+              {f === "all" && "Tous"}
+              {f === "auto" && <><Zap className="h-3.5 w-3.5 mr-1" />Auto</>}
+              {f === "manual" && <><User className="h-3.5 w-3.5 mr-1" />Manuel</>}
+            </Button>
+          ))}
+          <div className="w-px h-6 bg-border mx-1" />
+          {(["all", "this_week", "backlog"] as const).map((u) => (
+            <Button
+              key={u}
+              variant={urgencyFilter === u ? "default" : "outline"}
+              size="sm"
+              onClick={() => setUrgencyFilter(u)}
+            >
+              {u === "all" ? "Toutes urgences" : u === "this_week" ? "Cette semaine" : "Backlog"}
+            </Button>
+          ))}
+        </div>
+        <div className="relative sm:ml-auto w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher un sujet..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
       </div>
+
+      {/* Batch actions */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted border border-border">
+          <span className="text-sm font-medium">{selectedIds.size} selectionne(s)</span>
+          <Button variant="destructive" size="sm" onClick={handleBatchDismiss} disabled={dismissingBatch}>
+            {dismissingBatch ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+            Ecarter
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Annuler</Button>
+        </div>
+      )}
 
       {/* Edit dialog */}
       <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null) }}>
@@ -477,17 +628,37 @@ export default function VeillePage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium">Sujet</th>
-                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Source</th>
-                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">Score</th>
-                <th className="text-center px-4 py-3 font-medium hidden lg:table-cell">Format</th>
-                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">Urgence</th>
-                <th className="text-right px-4 py-3 font-medium hidden lg:table-cell">Detecte</th>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border accent-primary"
+                    checked={paginatedItems.length > 0 && selectedIds.size === paginatedItems.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
+                <th className="text-left px-4 py-3 font-medium cursor-pointer select-none" onClick={() => toggleSort("title")}>
+                  <span className="inline-flex items-center">Sujet<SortIcon column="title" /></span>
+                </th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort("source_name")}>
+                  <span className="inline-flex items-center">Source<SortIcon column="source_name" /></span>
+                </th>
+                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell cursor-pointer select-none" onClick={() => toggleSort("relevance_score")}>
+                  <span className="inline-flex items-center justify-center">Score<SortIcon column="relevance_score" /></span>
+                </th>
+                <th className="text-center px-4 py-3 font-medium hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort("suggested_format")}>
+                  <span className="inline-flex items-center justify-center">Format<SortIcon column="suggested_format" /></span>
+                </th>
+                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell cursor-pointer select-none" onClick={() => toggleSort("urgency")}>
+                  <span className="inline-flex items-center justify-center">Urgence<SortIcon column="urgency" /></span>
+                </th>
+                <th className="text-right px-4 py-3 font-medium hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort("detected_at")}>
+                  <span className="inline-flex items-center justify-end">Detecte<SortIcon column="detected_at" /></span>
+                </th>
                 <th className="text-right px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const isAuto = item.auto_detected
                 return (
                   <tr
@@ -495,6 +666,15 @@ export default function VeillePage() {
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => setPreviewItem(item)}
                   >
+                    {/* Checkbox */}
+                    <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border accent-primary"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                      />
+                    </td>
                     {/* Sujet */}
                     <td className="px-4 py-3 max-w-md">
                       <div className="flex items-center gap-2">
@@ -637,6 +817,23 @@ export default function VeillePage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && filteredItems.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-sm text-muted-foreground">
+            {filteredItems.length} resultat(s) — page {currentPage} / {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+              <ChevronLeft className="h-4 w-4 mr-1" />Precedent
+            </Button>
+            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+              Suivant<ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
