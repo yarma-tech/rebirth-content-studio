@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { getServiceClient } from "@/lib/supabase"
 import { generateDraft, improveDraft } from "@/lib/ai"
+import { loadAgentProfile, loadContentStrategy } from "@/lib/agent-context"
 
 export interface MCPTool {
   name: string
@@ -60,17 +61,20 @@ export const MCP_TOOLS: MCPTool[] = [
       },
     },
     handler: async (args) => {
-      const status = args.status as string | undefined
-      const searchQuery = args.query as string | undefined
-      const limit = (args.limit as number) || 20
+      const parsed = z.object({
+        status: z.enum(["idea", "draft", "ready", "scheduled", "published", "archived"]).optional(),
+        query: z.string().optional(),
+        limit: z.number().int().positive().optional(),
+      }).parse(args)
+      const limit = parsed.limit || 20
       const supabase = getServiceClient()
       let q = supabase
         .from("posts")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(limit)
-      if (status) q = q.eq("status", status)
-      if (searchQuery) q = q.or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
+      if (parsed.status) q = q.eq("status", parsed.status)
+      if (parsed.query) q = q.or(`title.ilike.%${parsed.query}%,content.ilike.%${parsed.query}%`)
       const { data, error } = await q
       if (error) throw new Error(error.message)
       return data
@@ -205,9 +209,14 @@ export const MCP_TOOLS: MCPTool[] = [
       },
     },
     handler: async (args) => {
-      const limit = typeof args.limit === "number" ? args.limit : 10
-      const minScore = typeof args.min_score === "number" ? args.min_score : 0
-      const status = (args.status as string) || "new"
+      const parsed = z.object({
+        limit: z.number().int().positive().optional(),
+        min_score: z.number().min(0).max(1).optional(),
+        status: z.enum(["new", "reviewed", "used", "dismissed"]).optional(),
+      }).parse(args)
+      const limit = parsed.limit || 10
+      const minScore = parsed.min_score || 0
+      const status = parsed.status || "new"
       const supabase = getServiceClient()
       const { data, error } = await supabase
         .from("veille_items")
@@ -878,6 +887,202 @@ export const MCP_TOOLS: MCPTool[] = [
         message: expired
           ? `Connexion LinkedIn expirée depuis ${expiresAt}. Reconnecte-toi dans /settings.`
           : `LinkedIn connecté (${creds.name}). Expire le ${expiresAt}.`,
+      }
+    },
+  },
+  {
+    name: "get_agent_profile",
+    description:
+      "Lire le profil de l'agent et la stratégie de contenu. Utile pour se rappeler qui est Yannick, son audience, ses piliers et sa stratégie.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    handler: async () => {
+      const [profile, strategy] = await Promise.all([
+        loadAgentProfile(),
+        loadContentStrategy(),
+      ])
+      return { profile, strategy }
+    },
+  },
+  {
+    name: "update_agent_memory",
+    description:
+      "Sauvegarder une observation ou préférence dans la mémoire de l'agent. Catégories : avoid_topic (sujet à ne plus aborder), insight (apprentissage), preference (préférence utilisateur).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["avoid_topic", "insight", "preference"],
+          description: "Type d'observation à sauvegarder",
+        },
+        content: {
+          type: "string",
+          description: "Le contenu de l'observation",
+        },
+      },
+      required: ["category", "content"],
+    },
+    handler: async (args) => {
+      const parsed = z
+        .object({
+          category: z.enum(["avoid_topic", "insight", "preference"]),
+          content: z.string(),
+        })
+        .parse(args)
+
+      const supabase = getServiceClient()
+
+      if (parsed.category === "avoid_topic") {
+        // Append to content_strategy.avoid_topics
+        const { data } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", "content_strategy")
+          .single()
+
+        const strategy = (data?.value as Record<string, unknown>) ?? {}
+        const avoidTopics = Array.isArray(strategy.avoid_topics)
+          ? strategy.avoid_topics
+          : []
+
+        if (!avoidTopics.includes(parsed.content)) {
+          avoidTopics.push(parsed.content)
+          strategy.avoid_topics = avoidTopics
+          await supabase.from("settings").upsert({
+            key: "content_strategy",
+            value: strategy,
+          })
+        }
+
+        return {
+          success: true,
+          message: `Sujet "${parsed.content}" ajouté aux sujets à éviter.`,
+        }
+      }
+
+      // For insights and preferences, store in a dedicated key
+      const memoryKey = "agent_memories"
+      const { data } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", memoryKey)
+        .single()
+
+      const memories = (data?.value as Record<string, unknown[]>) ?? {
+        insights: [],
+        preferences: [],
+      }
+      const arr = Array.isArray(memories[parsed.category + "s"])
+        ? (memories[parsed.category + "s"] as string[])
+        : []
+
+      arr.push(parsed.content)
+      // Keep only the last 50 entries per category
+      if (arr.length > 50) arr.shift()
+      memories[parsed.category + "s"] = arr
+
+      await supabase.from("settings").upsert({
+        key: memoryKey,
+        value: memories as Record<string, unknown>,
+      })
+
+      return {
+        success: true,
+        message: `${parsed.category} sauvegardé : "${parsed.content}"`,
+      }
+    },
+  },
+  {
+    name: "fetch_article",
+    description:
+      "Lire le contenu d'un article web à partir de son URL. Retourne le titre et le texte principal (tronqué à 3000 caractères). Utile pour résumer un article ou s'en inspirer pour un post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL de l'article à lire" },
+      },
+      required: ["url"],
+    },
+    handler: async (args) => {
+      const url = z.string().url().parse(args.url)
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10_000)
+
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          },
+        })
+
+        if (!res.ok) {
+          return { error: true, message: `Erreur HTTP ${res.status} pour ${url}` }
+        }
+
+        const html = await res.text()
+
+        // Extract title
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+        const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+        const title = (h1Match?.[1] || titleMatch?.[1] || "Sans titre").trim()
+
+        // Extract text: remove non-content blocks, then strip tags
+        let text = html
+          // Remove script, style, nav, footer, header, aside blocks
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+          .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+          .replace(/<header[\s\S]*?<\/header>/gi, "")
+          .replace(/<aside[\s\S]*?<\/aside>/gi, "")
+          .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+          // Convert block elements to newlines
+          .replace(/<\/?(p|div|br|li|h[1-6]|blockquote|article|section)[^>]*>/gi, "\n")
+          // Strip all remaining tags
+          .replace(/<[^>]+>/g, "")
+          // Decode common HTML entities
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&#\d+;/g, "")
+          .replace(/&\w+;/g, "")
+          // Normalize whitespace
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n\s*\n/g, "\n\n")
+          .trim()
+
+        // Truncate to 3000 chars
+        const maxChars = 3000
+        if (text.length > maxChars) {
+          text = text.slice(0, maxChars) + "..."
+        }
+
+        return {
+          title,
+          text,
+          source_url: url,
+          char_count: text.length,
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return { error: true, message: `Timeout (10s) pour ${url}` }
+        }
+        return {
+          error: true,
+          message: `Impossible de lire ${url}: ${err instanceof Error ? err.message : "Erreur inconnue"}`,
+        }
+      } finally {
+        clearTimeout(timeout)
       }
     },
   },

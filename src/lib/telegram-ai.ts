@@ -10,24 +10,32 @@ import {
   purgeOldMessages,
 } from "@/lib/telegram-memory"
 
-const MAX_RETRIES = 3
-const RETRY_DELAY_MS = 1500
+const PRIMARY_MODEL = "claude-sonnet-4-20250514"
+const FALLBACK_MODEL = "claude-haiku-4-5-20251001"
+const SONNET_RETRIES = 3
+const RETRY_DELAY_MS = 2000
 
-async function callClaudeWithRetry(
-  fn: () => Promise<Anthropic.Message>
+async function callClaudeWithFallback(
+  client: Anthropic,
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">
 ): Promise<Anthropic.Message> {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  // Try Sonnet 3 times
+  for (let attempt = 1; attempt <= SONNET_RETRIES; attempt++) {
     try {
-      return await fn()
+      return await client.messages.create({ ...params, model: PRIMARY_MODEL })
     } catch (err: unknown) {
       const isRetryable =
         err instanceof Error &&
         (err.message.includes("overloaded") || err.message.includes("529") || err.message.includes("rate_limit"))
-      if (!isRetryable || attempt === MAX_RETRIES) throw err
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)))
+      if (!isRetryable) throw err
+      if (attempt < SONNET_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)))
+      }
     }
   }
-  throw new Error("Echec apres plusieurs tentatives")
+  // Fallback to Haiku
+  console.log("[telegram] Sonnet overloaded, fallback to Haiku")
+  return await client.messages.create({ ...params, model: FALLBACK_MODEL })
 }
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || "https://rebirth-content-studio.vercel.app"
@@ -186,7 +194,7 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
     ],
   },
   {
-    keywords: ["ameliore", "ameliorer", "improve", "rends plus", "rend plus", "punchy", "percutant"],
+    keywords: ["ameliore", "améliore", "ameliorer", "améliorer", "improve", "rends plus", "rend plus", "punchy", "percutant"],
     tools: ["improve_draft", "get_post", "list_posts"],
   },
   {
@@ -204,6 +212,10 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
   {
     keywords: ["profil", "qui es-tu", "qui tu es", "ton role", "strategie", "memoire", "souviens", "retiens", "evite"],
     tools: ["get_agent_profile", "update_agent_memory"],
+  },
+  {
+    keywords: ["lien", "url", "article", "http", "https", ".com", ".fr", ".ca", ".io", "page", "site", "lis cet", "resume cet"],
+    tools: ["fetch_article", "generate_draft", "create_draft"],
   },
 ]
 
@@ -247,6 +259,15 @@ function compactToolResult(
           created_at: p.created_at,
         }))
       )
+    }
+
+    if (toolName === "fetch_article" && !Array.isArray(data)) {
+      const text = (data.text as string) || ""
+      return JSON.stringify({
+        title: data.title,
+        text: text.slice(0, 3000),
+        source_url: data.source_url,
+      })
     }
 
     if (toolName === "list_veille_items" && Array.isArray(data)) {
@@ -318,15 +339,12 @@ export async function processTelegramMessage(
 
   const systemPrompt = await getTelegramSystemPrompt()
 
-  let response = await callClaudeWithRetry(() =>
-    client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      system: systemPrompt,
-      tools,
-      messages,
-    })
-  )
+  let response = await callClaudeWithFallback(client, {
+    max_tokens: 400,
+    system: systemPrompt,
+    tools,
+    messages,
+  })
 
   // 6. Tool use loop (max 3 iterations)
   let iterations = 0
@@ -377,15 +395,12 @@ export async function processTelegramMessage(
     messages.push({ role: "assistant", content: response.content })
     messages.push({ role: "user", content: toolResults })
 
-    response = await callClaudeWithRetry(() =>
-      client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 400,
-        system: systemPrompt,
-        tools,
-        messages,
-      })
-    )
+    response = await callClaudeWithFallback(client, {
+      max_tokens: 400,
+      system: systemPrompt,
+      tools,
+      messages,
+    })
   }
 
   // 7. Extract final text response

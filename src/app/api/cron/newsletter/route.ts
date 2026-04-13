@@ -18,12 +18,13 @@ export async function GET(request: NextRequest) {
 
   const supabase = getServiceClient()
 
-  // Check for a newsletter marked as "ready" and scheduled for now or earlier
+  // Check for a newsletter marked as "ready" (scheduled_at NULL = send immediately, or past)
+  const now = new Date().toISOString()
   const { data: readyNewsletter } = await supabase
     .from("newsletters")
     .select("*")
     .eq("status", "ready")
-    .lte("scheduled_at", new Date().toISOString())
+    .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .single()

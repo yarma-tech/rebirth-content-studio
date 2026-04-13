@@ -84,7 +84,7 @@ export function renderNewsletterHtml(
                     <p style="margin:0 0 24px;color:#0077b6;font-size:15px;font-weight:400;">
                       Transfère cet email ou partage le lien d'inscription.
                     </p>
-                    <a href="https://rebirth-content-studio.vercel.app/subscribe"
+                    <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://rebirth-content-studio.vercel.app"}/subscribe"
                        style="display:inline-block;background-color:#00b4d8;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:500;">
                       S'inscrire a IA Friday
                     </a>
