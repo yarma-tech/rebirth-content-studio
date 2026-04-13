@@ -118,8 +118,8 @@ FORMAT :
 
 const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
   {
-    keywords: ["veille", "sujet", "tendance", "article", "news", "detecte"],
-    tools: ["list_veille_items"],
+    keywords: ["veille", "sujet", "tendance", "news", "detecte"],
+    tools: ["list_veille_items", "draft_from_veille"],
   },
   {
     keywords: ["source", "surveille", "rss", "youtube", "flux", "chaine", "feed"],
@@ -127,10 +127,9 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
   },
   {
     keywords: [
-      "rappel", "rappelle", "remind", "programme", "envoie-moi", "envoie moi",
-      "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+      "rappel", "rappelle", "remind", "envoie-moi", "envoie moi",
       "chaque jour", "chaque semaine", "quotidien", "hebdo",
-      "matin", "soir", "midi", "annule",
+      "annule rappel",
     ],
     tools: ["create_reminder", "list_reminders", "cancel_reminder"],
   },
@@ -145,8 +144,10 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
   {
     keywords: [
       "post", "brouillon", "draft", "ecris", "genere", "redige",
-      "programme", "schedule", "planifie", "lundi", "mardi", "mercredi", "jeudi", "vendredi",
-      "demain", "modifie", "change", "reformule", "ameliore", "titre", "hashtag",
+      "article", "travaille", "lien", "cherche", "trouve", "retrouve",
+      "programme", "schedule", "planifie",
+      "lundi", "mardi", "mercredi", "jeudi", "vendredi", "demain",
+      "modifie", "change", "reformule", "titre", "hashtag",
       "lis", "montre", "avis", "relis", "contenu", "ready",
       "publie", "poste", "linkedin", "en ligne", "lance",
     ],
@@ -156,9 +157,22 @@ const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
       "create_draft",
       "update_post",
       "generate_draft",
+      "improve_draft",
       "publish_to_linkedin",
       "delete_post",
     ],
+  },
+  {
+    keywords: ["ameliore", "ameliorer", "improve", "rends plus", "rend plus", "punchy", "percutant"],
+    tools: ["improve_draft", "get_post", "list_posts"],
+  },
+  {
+    keywords: ["newsletter", "ia friday", "envoie la newsletter", "genere newsletter"],
+    tools: ["create_newsletter", "regenerate_newsletter", "send_newsletter"],
+  },
+  {
+    keywords: ["linkedin connect", "connexion linkedin", "status linkedin", "expire"],
+    tools: ["check_linkedin_status"],
   },
   {
     keywords: ["resume", "point", "aujourd", "recap", "bilan"],

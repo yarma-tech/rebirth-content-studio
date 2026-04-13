@@ -50,25 +50,28 @@ export const MCP_TOOLS: MCPTool[] = [
   },
   {
     name: "list_posts",
-    description: "Lister les posts LinkedIn par statut (brouillon, prêt, programmé, publié, archivé)",
+    description: "Lister les posts LinkedIn par statut et/ou recherche par titre/contenu. Supporte la recherche textuelle pour trouver un post specifique.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["idea", "draft", "ready", "scheduled", "published", "archived"] },
+        query: { type: "string", description: "Recherche par titre ou contenu (insensible a la casse)" },
         limit: { type: "number" },
       },
     },
     handler: async (args) => {
       const status = args.status as string | undefined
+      const searchQuery = args.query as string | undefined
       const limit = (args.limit as number) || 20
       const supabase = getServiceClient()
-      let query = supabase
+      let q = supabase
         .from("posts")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(limit)
-      if (status) query = query.eq("status", status)
-      const { data, error } = await query
+      if (status) q = q.eq("status", status)
+      if (searchQuery) q = q.or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
+      const { data, error } = await q
       if (error) throw new Error(error.message)
       return data
     },
