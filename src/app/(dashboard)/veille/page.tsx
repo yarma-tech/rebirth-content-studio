@@ -124,7 +124,7 @@ export default function VeillePage() {
   const [editingItem, setEditingItem] = useState<VeilleItem | null>(null)
   const [previewItem, setPreviewItem] = useState<VeilleItem | null>(null)
   const [filter, setFilter] = useState<"all" | "auto" | "manual">("all")
-  const [urgencyFilter, setUrgencyFilter] = useState<"all" | "this_week" | "backlog">("all")
+  const [urgencyFilter, setUrgencyFilter] = useState<"all" | "immediate" | "this_week" | "backlog">("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortKey, setSortKey] = useState<string>("detected_at")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
@@ -448,14 +448,14 @@ export default function VeillePage() {
             </Button>
           ))}
           <div className="w-px h-6 bg-border mx-1" />
-          {(["all", "this_week", "backlog"] as const).map((u) => (
+          {(["all", "immediate", "this_week", "backlog"] as const).map((u) => (
             <Button
               key={u}
               variant={urgencyFilter === u ? "default" : "outline"}
               size="sm"
               onClick={() => setUrgencyFilter(u)}
             >
-              {u === "all" ? "Toutes urgences" : u === "this_week" ? "Cette semaine" : "Backlog"}
+              {u === "all" ? "Toutes urgences" : u === "immediate" ? "Urgent" : u === "this_week" ? "Cette semaine" : "Backlog"}
             </Button>
           ))}
         </div>
