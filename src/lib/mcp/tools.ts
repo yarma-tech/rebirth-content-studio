@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { getServiceClient } from "@/lib/supabase"
-import { generateDraft } from "@/lib/ai"
+import { generateDraft, improveDraft } from "@/lib/ai"
 
 export interface MCPTool {
   name: string
@@ -576,6 +576,306 @@ export const MCP_TOOLS: MCPTool[] = [
       const postId = z.string().uuid().parse(args.post_id)
       const { publishToLinkedIn } = await import("@/lib/linkedin-publish")
       return await publishToLinkedIn(postId)
+    },
+  },
+  {
+    name: "improve_draft",
+    description:
+      "Améliorer un post LinkedIn existant via IA. Passe le contenu actuel et une instruction d'amélioration. Retourne le texte amélioré (pas de sauvegarde automatique).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Contenu actuel du post à améliorer" },
+        instruction: { type: "string", description: "Instruction d'amélioration (ex: 'rends-le plus punchy', 'ajoute un CTA')" },
+      },
+      required: ["content", "instruction"],
+    },
+    handler: async (args) => {
+      const content = z.string().min(1).parse(args.content)
+      const instruction = z.string().min(1).parse(args.instruction)
+
+      const stream = await improveDraft(content, instruction)
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let result = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        result += decoder.decode(value, { stream: true })
+      }
+
+      return { improved_content: result }
+    },
+  },
+  {
+    name: "draft_from_veille",
+    description:
+      "Générer un brouillon de post LinkedIn à partir d'un sujet de veille. Récupère le sujet, génère le contenu via IA, crée le post en brouillon, et lie le sujet au post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        veille_item_id: { type: "string", description: "ID UUID du sujet de veille" },
+        pillar: {
+          type: "string",
+          enum: ["build_in_public", "vulgarisation", "retour_terrain"],
+          description: "Pilier du post (défaut: vulgarisation)",
+        },
+      },
+      required: ["veille_item_id"],
+    },
+    handler: async (args) => {
+      const veilleId = z.string().uuid().parse(args.veille_item_id)
+      const pillar = z.enum(["build_in_public", "vulgarisation", "retour_terrain"]).optional().parse(args.pillar) || "vulgarisation"
+
+      const supabase = getServiceClient()
+
+      // Fetch veille item
+      const { data: item, error: fetchErr } = await supabase
+        .from("veille_items")
+        .select("*")
+        .eq("id", veilleId)
+        .single()
+      if (fetchErr || !item) throw new Error(fetchErr?.message || "Sujet de veille non trouvé")
+
+      // Generate content via AI
+      const topic = `${item.title}. ${item.summary || ""} ${item.pme_angle ? `Angle PME : ${item.pme_angle}` : ""}`
+      const stream = await generateDraft(topic, pillar)
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let content = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        content += decoder.decode(value, { stream: true })
+      }
+
+      // Create post
+      const { data: post, error: postErr } = await supabase
+        .from("posts")
+        .insert({
+          title: item.title,
+          content,
+          pillar,
+          status: "draft",
+          ai_generated: true,
+          source_veille_id: veilleId,
+        })
+        .select()
+        .single()
+      if (postErr) throw new Error(postErr.message)
+
+      // Link veille item to post
+      await supabase
+        .from("veille_items")
+        .update({ status: "used", used_in_post_id: post.id })
+        .eq("id", veilleId)
+
+      return {
+        success: true,
+        post_id: post.id,
+        title: post.title,
+        message: `Brouillon créé depuis "${item.title}". ID: ${post.id}`,
+      }
+    },
+  },
+  {
+    name: "create_newsletter",
+    description:
+      "Générer une newsletter IA Friday à partir des sujets de veille et posts publiés des 7 derniers jours. Crée un brouillon de newsletter prêt à être relu et envoyé.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    handler: async () => {
+      const supabase = getServiceClient()
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      // Fetch recent veille items
+      const { data: veilleItems } = await supabase
+        .from("veille_items")
+        .select("*")
+        .gte("detected_at", sevenDaysAgo)
+        .order("relevance_score", { ascending: false })
+        .limit(15)
+
+      // Fetch recent published posts
+      const { data: posts } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("status", "published")
+        .gte("published_at", sevenDaysAgo)
+        .limit(5)
+
+      const { generateNewsletterDraft } = await import("@/lib/newsletter-ai")
+      const draft = await generateNewsletterDraft(veilleItems || [], posts || [])
+
+      // Insert newsletter
+      const { data: newsletter, error } = await supabase
+        .from("newsletters")
+        .insert({
+          subject: draft.subject,
+          intro: draft.intro,
+          content_html: draft.content_html,
+          status: "draft",
+        })
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+
+      return {
+        success: true,
+        newsletter_id: newsletter.id,
+        subject: newsletter.subject,
+        message: `Newsletter "${newsletter.subject}" générée en brouillon.`,
+      }
+    },
+  },
+  {
+    name: "regenerate_newsletter",
+    description:
+      "Régénérer le contenu IA d'une newsletter existante à partir des données veille/posts récentes. Écrase le contenu actuel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID UUID de la newsletter" },
+      },
+      required: ["id"],
+    },
+    handler: async (args) => {
+      const id = z.string().uuid().parse(args.id)
+      const supabase = getServiceClient()
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      const { data: veilleItems } = await supabase
+        .from("veille_items")
+        .select("*")
+        .gte("detected_at", sevenDaysAgo)
+        .order("relevance_score", { ascending: false })
+        .limit(15)
+
+      const { data: posts } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("status", "published")
+        .gte("published_at", sevenDaysAgo)
+        .limit(5)
+
+      const { generateNewsletterDraft } = await import("@/lib/newsletter-ai")
+      const draft = await generateNewsletterDraft(veilleItems || [], posts || [])
+
+      const { data, error } = await supabase
+        .from("newsletters")
+        .update({
+          subject: draft.subject,
+          intro: draft.intro,
+          content_html: draft.content_html,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+
+      return {
+        success: true,
+        newsletter_id: data.id,
+        subject: data.subject,
+        message: `Newsletter régénérée : "${data.subject}"`,
+      }
+    },
+  },
+  {
+    name: "send_newsletter",
+    description:
+      "Envoyer une newsletter aux abonnés actifs via Resend. La newsletter doit exister et ne pas être déjà envoyée. Met à jour le statut à 'sent'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID UUID de la newsletter à envoyer" },
+      },
+      required: ["id"],
+    },
+    handler: async (args) => {
+      const id = z.string().uuid().parse(args.id)
+      const supabase = getServiceClient()
+
+      const { data: newsletter, error: nlErr } = await supabase
+        .from("newsletters")
+        .select("*")
+        .eq("id", id)
+        .single()
+      if (nlErr || !newsletter) throw new Error("Newsletter introuvable")
+      if (newsletter.status === "sent") throw new Error("Newsletter déjà envoyée")
+
+      const { data: subscribers } = await supabase
+        .from("subscribers")
+        .select("email")
+        .eq("status", "active")
+      if (!subscribers || subscribers.length === 0) throw new Error("Aucun abonné actif")
+
+      await supabase.from("newsletters").update({ status: "sending" }).eq("id", id)
+
+      const { sendBatchNewsletter } = await import("@/lib/resend")
+      const { renderNewsletterHtml } = await import("@/lib/newsletter-template")
+
+      const results = await sendBatchNewsletter(
+        subscribers,
+        newsletter.subject,
+        (unsubscribeUrl: string) => renderNewsletterHtml(newsletter.content_html || "", unsubscribeUrl)
+      )
+
+      await supabase
+        .from("newsletters")
+        .update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          recipient_count: results.sent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      return {
+        success: true,
+        sent: results.sent,
+        failed: results.failed,
+        message: `Newsletter envoyée à ${results.sent} abonné(s).`,
+      }
+    },
+  },
+  {
+    name: "check_linkedin_status",
+    description:
+      "Vérifier le statut de connexion LinkedIn : connecté, expiré, ou déconnecté. Retourne le nom du compte et la date d'expiration.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    handler: async () => {
+      const supabase = getServiceClient()
+      const { data } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "linkedin")
+        .single()
+
+      if (!data?.value) {
+        return { connected: false, message: "LinkedIn non connecté. Va dans /settings pour connecter ton compte." }
+      }
+
+      const creds = data.value as Record<string, unknown>
+      const expiresAt = creds.expires_at as string | undefined
+      const expired = expiresAt ? new Date(expiresAt).getTime() < Date.now() : false
+
+      return {
+        connected: true,
+        expired,
+        name: creds.name || null,
+        connected_at: creds.connected_at || null,
+        expires_at: expiresAt || null,
+        message: expired
+          ? `Connexion LinkedIn expirée depuis ${expiresAt}. Reconnecte-toi dans /settings.`
+          : `LinkedIn connecté (${creds.name}). Expire le ${expiresAt}.`,
+      }
     },
   },
 ]
