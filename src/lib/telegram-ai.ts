@@ -230,9 +230,9 @@ function selectTools(messageText: string): MCPTool[] {
     }
   }
 
-  // Fallback: load all tools if no keyword matched
+  // No keyword matched → conversation pure, pas de tools
   if (selected.size === 0) {
-    return MCP_TOOLS
+    return []
   }
 
   return MCP_TOOLS.filter((t) => selected.has(t.name))
@@ -320,13 +320,15 @@ export async function processTelegramMessage(
     input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
   }))
 
-  // Always include the summary helper
-  tools.push({
-    name: "get_daily_summary",
-    description:
-      "Obtenir le resume quotidien : posts recents, brouillons en attente, sujets de veille",
-    input_schema: { type: "object" as const, properties: {} },
-  })
+  // Add summary helper only if tools are selected
+  if (tools.length > 0) {
+    tools.push({
+      name: "get_daily_summary",
+      description:
+        "Obtenir le resume quotidien : posts recents, brouillons en attente, sujets de veille",
+      input_schema: { type: "object" as const, properties: {} },
+    })
+  }
 
   // 5. Build messages: history + current message is already in history
   //    (we saved it at step 2, loadHistory returns it)
@@ -339,12 +341,15 @@ export async function processTelegramMessage(
 
   const systemPrompt = await getTelegramSystemPrompt()
 
-  let response = await callClaudeWithFallback(client, {
-    max_tokens: 400,
+  // Only pass tools if any were selected (empty array causes API issues)
+  const createParams: Omit<Anthropic.MessageCreateParamsNonStreaming, "model"> = {
+    max_tokens: 1024,
     system: systemPrompt,
-    tools,
     messages,
-  })
+    ...(tools.length > 0 ? { tools } : {}),
+  }
+
+  let response = await callClaudeWithFallback(client, createParams)
 
   // 6. Tool use loop (max 3 iterations)
   let iterations = 0
@@ -396,7 +401,7 @@ export async function processTelegramMessage(
     messages.push({ role: "user", content: toolResults })
 
     response = await callClaudeWithFallback(client, {
-      max_tokens: 400,
+      max_tokens: 1024,
       system: systemPrompt,
       tools,
       messages,
@@ -404,12 +409,27 @@ export async function processTelegramMessage(
   }
 
   // 7. Extract final text response
-  const textBlocks = response.content.filter(
+  let textBlocks = response.content.filter(
     (b): b is Anthropic.TextBlock => b.type === "text"
   )
 
+  // If no text (Claude only produced tool_use), force a text-only response
+  if (textBlocks.length === 0) {
+    messages.push({ role: "assistant", content: response.content })
+    messages.push({ role: "user", content: "Reponds maintenant en texte." })
+
+    const retry = await callClaudeWithFallback(client, {
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages,
+    })
+    textBlocks = retry.content.filter(
+      (b): b is Anthropic.TextBlock => b.type === "text"
+    )
+  }
+
   const finalText =
-    textBlocks.map((b) => b.text).join("\n") || "Pas de reponse."
+    textBlocks.map((b) => b.text).join("\n") || "Desole, je n'ai pas pu traiter ta demande. Reformule ou reessaie."
 
   // 8. Save assistant response to memory
   await saveMessage(chatId, "assistant", finalText)
