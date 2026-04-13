@@ -11,7 +11,6 @@ import {
   Newspaper,
   Users,
   Settings,
-  Sparkles,
   Menu,
   X,
   CheckSquare,
@@ -38,7 +37,8 @@ function NavContent({ onClose }: { onClose?: () => void }) {
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-border">
         <Link href="/" className="flex items-center gap-2" onClick={onClose}>
-          <Sparkles className="h-6 w-6 text-primary" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-rebirth-v2.png" alt="Rebirth" className="h-7 w-7" />
           <span className="font-bold text-lg">Rebirth</span>
         </Link>
         <p className="text-xs text-muted-foreground mt-1">Content Studio</p>
@@ -97,7 +97,8 @@ export function MobileNav() {
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-card border-b border-border">
       <Link href="/" className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-primary" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-rebirth-v2.png" alt="Rebirth" className="h-6 w-6" />
         <span className="font-bold">Rebirth</span>
       </Link>
       <Sheet open={open} onOpenChange={setOpen}>
