@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { getAnthropicClient } from "@/lib/anthropic"
-import { MCP_TOOLS, type MCPTool } from "@/lib/mcp/tools"
+import { MCP_TOOLS } from "@/lib/mcp/tools"
 import { getServiceClient } from "@/lib/supabase"
 import { buildDynamicContext } from "@/lib/agent-context"
 import {
@@ -79,6 +79,8 @@ REGLES :
 - Sois bref — c'est un chat mobile, pas un email (max 5-8 lignes)
 - Yannick prefere parler en langage naturel, mais il utilise aussi les raccourcis ci-dessous
 - Route vers le bon tool selon l'intention, pas selon la commande exacte
+- Si le message est une question d'opinion, une reflexion, ou une discussion ("qu'en penses-tu ?", "comment tu vois ca ?", "j'hesite entre..."), reponds en texte sans appeler de tool. Tu es un interlocuteur, pas juste un executeur.
+- N'appelle un tool que quand il y a une ACTION claire a executer (creer, modifier, lister, publier, programmer, supprimer).
 - Pour les contenus longs (draft genere, newsletter, post complet) :
   envoie un resume de 2-3 lignes + le lien dashboard.
   Format : ${DASHBOARD_URL}/posts/{id} ou /newsletter/{id}
@@ -143,99 +145,6 @@ FORMAT :
 - Pour les stats : une ligne par metrique, chiffres en gras
 - Pour les drafts/posts lus : resume + avis + lien dashboard
 - Apres une modif ou programmation : confirmation courte + lien`
-}
-
-// ─── Lazy tool selection (saves ~400 tokens on focused queries) ──────
-
-const TOOL_RULES: Array<{ keywords: string[]; tools: string[] }> = [
-  {
-    keywords: ["veille", "sujet", "tendance", "news", "detecte"],
-    tools: ["list_veille_items", "draft_from_veille"],
-  },
-  {
-    keywords: ["source", "surveille", "rss", "youtube", "flux", "chaine", "feed"],
-    tools: ["add_veille_source"],
-  },
-  {
-    keywords: [
-      "rappel", "rappelle", "remind", "envoie-moi", "envoie moi",
-      "chaque jour", "chaque semaine", "quotidien", "hebdo",
-      "annule rappel",
-    ],
-    tools: ["create_reminder", "list_reminders", "cancel_reminder"],
-  },
-  {
-    keywords: ["image", "photo", "attache", "illustration", "visuel", "Photo reçue", "enleve", "retire", "supprime image"],
-    tools: ["attach_image_to_post", "list_posts", "get_post", "update_post"],
-  },
-  {
-    keywords: ["stats", "chiffre", "metrique", "combien", "impression", "performance"],
-    tools: ["get_stats"],
-  },
-  {
-    keywords: [
-      "post", "brouillon", "draft", "ecris", "genere", "redige",
-      "article", "travaille", "lien", "cherche", "trouve", "retrouve",
-      "programme", "schedule", "planifie",
-      "lundi", "mardi", "mercredi", "jeudi", "vendredi", "demain",
-      "modifie", "change", "reformule", "titre", "hashtag",
-      "lis", "montre", "avis", "relis", "contenu", "ready",
-      "publie", "poste", "linkedin", "en ligne", "lance",
-    ],
-    tools: [
-      "list_posts",
-      "get_post",
-      "create_draft",
-      "update_post",
-      "generate_draft",
-      "improve_draft",
-      "publish_to_linkedin",
-      "delete_post",
-    ],
-  },
-  {
-    keywords: ["ameliore", "améliore", "ameliorer", "améliorer", "improve", "rends plus", "rend plus", "punchy", "percutant"],
-    tools: ["improve_draft", "get_post", "list_posts"],
-  },
-  {
-    keywords: ["newsletter", "ia friday", "envoie la newsletter", "genere newsletter"],
-    tools: ["create_newsletter", "regenerate_newsletter", "send_newsletter"],
-  },
-  {
-    keywords: ["linkedin connect", "connexion linkedin", "status linkedin", "expire"],
-    tools: ["check_linkedin_status"],
-  },
-  {
-    keywords: ["resume", "point", "aujourd", "recap", "bilan"],
-    tools: ["get_daily_summary", "list_veille_items", "get_stats"],
-  },
-  {
-    keywords: ["profil", "qui es-tu", "qui tu es", "ton role", "strategie", "memoire", "souviens", "retiens", "evite"],
-    tools: ["get_agent_profile", "update_agent_memory"],
-  },
-  {
-    keywords: ["lien", "url", "article", "http", "https", ".com", ".fr", ".ca", ".io", "page", "site", "lis cet", "resume cet"],
-    tools: ["fetch_article", "generate_draft", "create_draft"],
-  },
-]
-
-function selectTools(messageText: string): MCPTool[] {
-  const text = messageText.toLowerCase()
-
-  const selected = new Set<string>()
-
-  for (const rule of TOOL_RULES) {
-    if (rule.keywords.some((k) => text.includes(k))) {
-      rule.tools.forEach((t) => selected.add(t))
-    }
-  }
-
-  // No keyword matched → conversation pure, pas de tools
-  if (selected.size === 0) {
-    return []
-  }
-
-  return MCP_TOOLS.filter((t) => selected.has(t.name))
 }
 
 // ─── Compact tool results (saves ~1000 tokens on list queries) ───────
@@ -312,23 +221,20 @@ export async function processTelegramMessage(
   // 3. Load conversation history (budget: 3000 tokens)
   const history = await loadHistory(chatId, 3000)
 
-  // 4. Select relevant tools (lazy-loading) — use enriched message for keyword matching
-  const selectedMcpTools = selectTools(messageForHistory)
-  const tools: Anthropic.Tool[] = selectedMcpTools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
-  }))
-
-  // Add summary helper only if tools are selected
-  if (tools.length > 0) {
-    tools.push({
+  // 4. All tools available — Claude decides which to use (or none for conversation)
+  const tools: Anthropic.Tool[] = [
+    ...MCP_TOOLS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
+    })),
+    {
       name: "get_daily_summary",
       description:
         "Obtenir le resume quotidien : posts recents, brouillons en attente, sujets de veille",
       input_schema: { type: "object" as const, properties: {} },
-    })
-  }
+    },
+  ]
 
   // 5. Build messages: history + current message is already in history
   //    (we saved it at step 2, loadHistory returns it)
@@ -341,12 +247,11 @@ export async function processTelegramMessage(
 
   const systemPrompt = await getTelegramSystemPrompt()
 
-  // Only pass tools if any were selected (empty array causes API issues)
   const createParams: Omit<Anthropic.MessageCreateParamsNonStreaming, "model"> = {
     max_tokens: 1024,
     system: systemPrompt,
     messages,
-    ...(tools.length > 0 ? { tools } : {}),
+    tools,
   }
 
   let response = await callClaudeWithFallback(client, createParams)
