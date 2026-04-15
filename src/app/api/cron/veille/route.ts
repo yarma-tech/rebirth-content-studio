@@ -206,6 +206,39 @@ export async function GET(request: NextRequest) {
     completed_at: new Date().toISOString(),
   })
 
+  // 8. Daily suggestions digest (morning run only, ~12h UTC = 8h Montreal)
+  let suggestedCount = 0
+  const currentHourUTC = new Date().getUTCHours()
+  if (currentHourUTC >= 10 && currentHourUTC <= 14) {
+    try {
+      const { data: suggestions } = await supabase
+        .from("veille_items")
+        .select("id, title, source_name, relevance_score, pme_angle")
+        .eq("status", "new")
+        .is("suggested_at", null)
+        .gte("relevance_score", 0.7)
+        .order("relevance_score", { ascending: false })
+        .limit(5)
+
+      if (suggestions && suggestions.length > 0) {
+        const { sendVeilleSuggestions } = await import("@/lib/telegram-notifications")
+        await sendVeilleSuggestions(suggestions)
+
+        await supabase
+          .from("veille_items")
+          .update({ suggested_at: new Date().toISOString() })
+          .in("id", suggestions.map((s) => s.id))
+
+        suggestedCount = suggestions.length
+      }
+    } catch (err) {
+      errors.push({
+        source: "Suggestions digest",
+        error: String(err instanceof Error ? err.message : err).slice(0, 200),
+      })
+    }
+  }
+
   return NextResponse.json({
     success: true,
     feeds_checked: sources.length,
@@ -213,6 +246,7 @@ export async function GET(request: NextRequest) {
     new_items: newItems.length,
     items_scored: scoredItems.length,
     items_inserted: insertedCount,
+    suggested_count: suggestedCount,
     errors: errors.length > 0 ? errors : undefined,
     duration_ms: Date.now() - startedAt.getTime(),
   })
