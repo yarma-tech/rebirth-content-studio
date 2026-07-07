@@ -22,7 +22,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Database, Bot, Newspaper, Link2, Bell, CheckCircle, AlertCircle, Rss, Plus, Trash2, Video } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Database, Bot, Newspaper, Link2, Bell, CheckCircle, AlertCircle, Rss, Plus, Trash2, Video, Brain, Target, Save, Loader2, X } from "lucide-react"
 import { toast } from "sonner"
 
 interface VeilleSource {
@@ -52,6 +53,13 @@ function SettingsContent() {
     expires_at?: string
   } | null>(null)
 
+  // Agent profile & strategy state
+  const [agentProfile, setAgentProfile] = useState<Record<string, unknown> | null>(null)
+  const [contentStrategy, setContentStrategy] = useState<Record<string, unknown> | null>(null)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [strategySaving, setStrategySaving] = useState(false)
+  const [newAvoidTopic, setNewAvoidTopic] = useState("")
+
   useEffect(() => {
     if (searchParams.get("linkedin_connected")) {
       toast.success("LinkedIn connecte avec succes !")
@@ -69,7 +77,53 @@ function SettingsContent() {
       .then((r) => r.json())
       .then((d) => setVeilleSources(d.sources || []))
       .catch(() => {})
+
+    fetch("/api/settings/agent-profile")
+      .then((r) => r.json())
+      .then((d) => setAgentProfile(d.profile))
+      .catch(() => {})
+
+    fetch("/api/settings/content-strategy")
+      .then((r) => r.json())
+      .then((d) => setContentStrategy(d.strategy))
+      .catch(() => {})
   }, [searchParams])
+
+  const handleSaveProfile = async () => {
+    if (!agentProfile) return
+    setProfileSaving(true)
+    try {
+      const res = await fetch("/api/settings/agent-profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: agentProfile }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Profil agent sauvegarde !")
+    } catch {
+      toast.error("Erreur lors de la sauvegarde")
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const handleSaveStrategy = async () => {
+    if (!contentStrategy) return
+    setStrategySaving(true)
+    try {
+      const res = await fetch("/api/settings/content-strategy", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategy: contentStrategy }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Strategie sauvegardee !")
+    } catch {
+      toast.error("Erreur lors de la sauvegarde")
+    } finally {
+      setStrategySaving(false)
+    }
+  }
 
   const handleAddSource = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -327,6 +381,253 @@ function SettingsContent() {
           </CardContent>
         </Card>
 
+        {/* Agent Profile Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Brain className="h-5 w-5 text-violet-500" />
+                <div>
+                  <CardTitle className="text-base">Profil Agent IA</CardTitle>
+                  <CardDescription>Ce que l&apos;agent sait sur toi et ton audience</CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveProfile}
+                disabled={profileSaving || !agentProfile}
+              >
+                {profileSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                Sauvegarder
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!agentProfile ? (
+              <p className="text-sm text-muted-foreground">Chargement...</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="profile-name">Nom</Label>
+                    <Input
+                      id="profile-name"
+                      value={(agentProfile.name as string) || ""}
+                      onChange={(e) => setAgentProfile({ ...agentProfile, name: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="profile-role">Role actuel</Label>
+                    <Input
+                      id="profile-role"
+                      value={(agentProfile.current_role as string) || ""}
+                      onChange={(e) => setAgentProfile({ ...agentProfile, current_role: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="profile-background">Parcours (bio detaillee)</Label>
+                  <Textarea
+                    id="profile-background"
+                    rows={3}
+                    value={(agentProfile.background as string) || ""}
+                    onChange={(e) => setAgentProfile({ ...agentProfile, background: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="profile-objective">Objectif</Label>
+                  <Input
+                    id="profile-objective"
+                    value={(agentProfile.objective as string) || ""}
+                    onChange={(e) => setAgentProfile({ ...agentProfile, objective: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="profile-location">Localisation</Label>
+                    <Input
+                      id="profile-location"
+                      value={(agentProfile.location as string) || ""}
+                      onChange={(e) => setAgentProfile({ ...agentProfile, location: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="profile-origin">Origine</Label>
+                    <Input
+                      id="profile-origin"
+                      value={(agentProfile.origin as string) || ""}
+                      onChange={(e) => setAgentProfile({ ...agentProfile, origin: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Differenciateurs</Label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {(Array.isArray(agentProfile.differentiators) ? agentProfile.differentiators as string[] : []).map((d, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {d}
+                        <button
+                          className="ml-1 hover:text-destructive"
+                          onClick={() => {
+                            const arr = [...(agentProfile.differentiators as string[])]
+                            arr.splice(i, 1)
+                            setAgentProfile({ ...agentProfile, differentiators: arr })
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      placeholder="Ajouter un differenciateur..."
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                          e.preventDefault()
+                          const arr = Array.isArray(agentProfile.differentiators) ? [...agentProfile.differentiators as string[]] : []
+                          arr.push(e.currentTarget.value.trim())
+                          setAgentProfile({ ...agentProfile, differentiators: arr })
+                          e.currentTarget.value = ""
+                        }
+                      }}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="profile-tone">Notes sur le ton</Label>
+                  <Input
+                    id="profile-tone"
+                    value={(agentProfile.tone_notes as string) || ""}
+                    onChange={(e) => setAgentProfile({ ...agentProfile, tone_notes: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Content Strategy Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Target className="h-5 w-5 text-emerald-500" />
+                <div>
+                  <CardTitle className="text-base">Strategie de contenu</CardTitle>
+                  <CardDescription>Piliers, formats preferes et sujets a eviter</CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveStrategy}
+                disabled={strategySaving || !contentStrategy}
+              >
+                {strategySaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                Sauvegarder
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!contentStrategy ? (
+              <p className="text-sm text-muted-foreground">Chargement...</p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">Piliers de contenu</Label>
+                  <div className="space-y-2 mt-2">
+                    {(Array.isArray(contentStrategy.pillars) ? contentStrategy.pillars as Array<Record<string, unknown>> : []).map((pillar, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-accent/30">
+                        <Badge variant="outline" className="shrink-0 mt-0.5">
+                          {pillar.weight as number}%
+                        </Badge>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{pillar.label as string}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{pillar.description as string}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <Label>Sujets a eviter</Label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {(Array.isArray(contentStrategy.avoid_topics) ? contentStrategy.avoid_topics as string[] : []).map((topic, i) => (
+                      <Badge key={i} variant="destructive" className="text-xs">
+                        {topic}
+                        <button
+                          className="ml-1 hover:text-white"
+                          onClick={() => {
+                            const arr = [...(contentStrategy.avoid_topics as string[])]
+                            arr.splice(i, 1)
+                            setContentStrategy({ ...contentStrategy, avoid_topics: arr })
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {(contentStrategy.avoid_topics as string[] || []).length === 0 && (
+                      <span className="text-sm text-muted-foreground">Aucun sujet a eviter</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      placeholder="Ajouter un sujet a eviter..."
+                      value={newAvoidTopic}
+                      onChange={(e) => setNewAvoidTopic(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newAvoidTopic.trim()) {
+                          e.preventDefault()
+                          const arr = Array.isArray(contentStrategy.avoid_topics) ? [...contentStrategy.avoid_topics as string[]] : []
+                          arr.push(newAvoidTopic.trim())
+                          setContentStrategy({ ...contentStrategy, avoid_topics: arr })
+                          setNewAvoidTopic("")
+                        }
+                      }}
+                      className="text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (newAvoidTopic.trim()) {
+                          const arr = Array.isArray(contentStrategy.avoid_topics) ? [...contentStrategy.avoid_topics as string[]] : []
+                          arr.push(newAvoidTopic.trim())
+                          setContentStrategy({ ...contentStrategy, avoid_topics: arr })
+                          setNewAvoidTopic("")
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <Label>Formats preferes</Label>
+                  <div className="space-y-1 mt-1">
+                    {(Array.isArray(contentStrategy.preferred_formats) ? contentStrategy.preferred_formats as string[] : []).map((f, i) => (
+                      <p key={i} className="text-sm text-muted-foreground">• {f}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -387,7 +688,7 @@ function SettingsContent() {
             </code>
           </div>
           <p className="text-sm text-muted-foreground">
-            5 tools disponibles : create_draft, list_posts, get_post, update_post, generate_draft
+            22 tools disponibles dont get_agent_profile et update_agent_memory
           </p>
         </CardContent>
       </Card>
