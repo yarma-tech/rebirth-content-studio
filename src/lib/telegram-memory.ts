@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getServiceClient } from "@/lib/supabase"
 
 const MAX_HISTORY_TOKENS = 3000
-const MAX_AGE_HOURS = 24
+const MAX_AGE_HOURS = 72
 const MAX_MESSAGES = 30
 
 // ─── Token estimation ────────────────────────────────────────────────
@@ -56,6 +56,7 @@ export async function loadHistory(
     .from("telegram_messages")
     .select("role, content, token_estimate")
     .eq("chat_id", chatId)
+    .neq("role", "context_summary")
     .gt("created_at", cutoff)
     .order("created_at", { ascending: false })
     .limit(MAX_MESSAGES)
@@ -109,6 +110,20 @@ export async function loadHistory(
     }
   }
 
+  // Prepend long-term context summary if available
+  const longTermCtx = await loadLongTermContext(chatId)
+  if (longTermCtx && clean.length > 0) {
+    const ctxTokens = estimateTokens(longTermCtx)
+    if (budget - ctxTokens >= 0) {
+      // Inject as first user message (context preamble)
+      if (clean[0].role === "user") {
+        clean[0].content = `[Résumé des échanges précédents : ${longTermCtx}]\n\n${clean[0].content as string}`
+      } else {
+        clean.unshift({ role: "user", content: `[Résumé des échanges précédents : ${longTermCtx}]` })
+      }
+    }
+  }
+
   return clean
 }
 
@@ -125,11 +140,54 @@ export async function purgeOldMessages(chatId: string): Promise<void> {
     .lt("created_at", cutoff)
 }
 
+// ─── Long-term context summary ──────────────────────────────────────
+// Persists indefinitely as a compact summary of conversation themes
+
+export async function loadLongTermContext(chatId: string): Promise<string | null> {
+  const supabase = getServiceClient()
+  const { data } = await supabase
+    .from("telegram_messages")
+    .select("content")
+    .eq("chat_id", chatId)
+    .eq("role", "context_summary")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single()
+
+  return data?.content ?? null
+}
+
+export async function saveLongTermContext(chatId: string, summary: string): Promise<void> {
+  const supabase = getServiceClient()
+
+  // Delete previous summary for this chat
+  await supabase
+    .from("telegram_messages")
+    .delete()
+    .eq("chat_id", chatId)
+    .eq("role", "context_summary")
+
+  // Insert new summary
+  await supabase.from("telegram_messages").insert({
+    chat_id: chatId,
+    role: "context_summary",
+    content: summary,
+    token_estimate: estimateTokens(summary),
+  })
+}
+
 // ─── Tool result summarization (10x compression) ────────────────────
 
 function summarizeToolResult(toolName: string, rawResult: unknown): string {
   try {
     const data = rawResult as Record<string, unknown>[] | Record<string, unknown>
+
+    if (toolName === "fetch_article" && !Array.isArray(data)) {
+      if (data.error) return `[fetch_article] Erreur : ${data.message}`
+      const title = (data.title as string) || "Sans titre"
+      const chars = data.char_count || "?"
+      return `[fetch_article] "${title}" — ${chars} caractères extraits de ${data.source_url}`
+    }
 
     if (toolName === "list_veille_items" && Array.isArray(data)) {
       const top = data
