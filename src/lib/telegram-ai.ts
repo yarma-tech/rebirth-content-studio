@@ -10,7 +10,7 @@ import {
   purgeOldMessages,
 } from "@/lib/telegram-memory"
 
-const PRIMARY_MODEL = "claude-sonnet-4-20250514"
+const PRIMARY_MODEL = "claude-sonnet-5"
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001"
 const SONNET_RETRIES = 3
 const RETRY_DELAY_MS = 2000
@@ -22,7 +22,7 @@ async function callClaudeWithFallback(
   // Try Sonnet 3 times
   for (let attempt = 1; attempt <= SONNET_RETRIES; attempt++) {
     try {
-      return await client.messages.create({ ...params, model: PRIMARY_MODEL })
+      return await client.messages.create({ ...params, model: PRIMARY_MODEL, thinking: { type: "disabled" } })
     } catch (err: unknown) {
       const isRetryable =
         err instanceof Error &&

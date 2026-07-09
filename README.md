@@ -24,7 +24,7 @@ Plateforme de contenu LinkedIn + newsletter **IA Friday** pour la democratisatio
 - **Framework:** Next.js 15+ (App Router) + TypeScript
 - **Database:** Supabase (PostgreSQL)
 - **UI:** TailwindCSS + shadcn/ui
-- **IA:** Anthropic Claude (Sonnet 4)
+- **IA:** Anthropic Claude (Sonnet 5, fallback Haiku 4.5)
 - **LinkedIn:** LinkedIn API v2 (OAuth 2.0)
 - **Newsletter:** Resend + React Email
 - **Notifications:** Telegram Bot API
