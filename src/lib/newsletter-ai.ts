@@ -44,8 +44,9 @@ export async function generateNewsletterDraft(
     .join("\n")
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-5",
     max_tokens: 3000,
+    thinking: { type: "disabled" },
     system: NEWSLETTER_PROMPT,
     messages: [
       {
