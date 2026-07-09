@@ -1,0 +1,30 @@
+# Scan de veille (RSS + scoring IA) deporte hors de Vercel.
+#
+# Voir cron-frequent.yml pour le contexte (limites du plan Vercel Hobby) et
+# les secrets/variables requis (CRON_SECRET, APP_URL).
+name: Cron - Veille scan
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: cron-veille
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve base URL
+        id: url
+        run: |
+          BASE_URL="${{ vars.APP_URL }}"
+          echo "base=${BASE_URL:-https://rebirth-content-studio.vercel.app}" >> "$GITHUB_OUTPUT"
+
+      - name: Run veille scan
+        run: |
+          curl --fail-with-body -sS --max-time 300 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ steps.url.outputs.base }}/api/cron/veille"
