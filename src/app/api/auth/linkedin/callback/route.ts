@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   const { searchParams } = new URL(request.url)
   const code = searchParams.get("code")
   const state = searchParams.get("state")
@@ -9,15 +10,17 @@ export async function GET(request: NextRequest) {
   const storedState = request.cookies.get("linkedin_oauth_state")?.value
 
   if (error) {
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings?linkedin_error=${error}`
-    )
+    return NextResponse.redirect(`${appUrl}/settings?linkedin_error=${error}`)
   }
 
   if (!code || !state || state !== storedState) {
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings?linkedin_error=invalid_state`
-    )
+    return NextResponse.redirect(`${appUrl}/settings?linkedin_error=invalid_state`)
+  }
+
+  const clientId = process.env.LINKEDIN_CLIENT_ID
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    return NextResponse.redirect(`${appUrl}/settings?linkedin_error=missing_config`)
   }
 
   // Exchange code for access token
@@ -27,9 +30,9 @@ export async function GET(request: NextRequest) {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/linkedin/callback`,
-      client_id: process.env.LINKEDIN_CLIENT_ID!,
-      client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+      redirect_uri: `${appUrl}/api/auth/linkedin/callback`,
+      client_id: clientId,
+      client_secret: clientSecret,
     }),
   })
 
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
     const err = await tokenRes.text()
     console.error("[LinkedIn OAuth] Token exchange failed:", err)
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings?linkedin_error=token_exchange_failed`
+      `${appUrl}/settings?linkedin_error=token_exchange_failed`
     )
   }
 
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
   if (!profileRes.ok) {
     console.error("[LinkedIn OAuth] Profile fetch failed:", await profileRes.text())
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings?linkedin_error=profile_fetch_failed`
+      `${appUrl}/settings?linkedin_error=profile_fetch_failed`
     )
   }
 
@@ -75,7 +78,7 @@ export async function GET(request: NextRequest) {
   })
 
   const response = NextResponse.redirect(
-    `${process.env.NEXT_PUBLIC_APP_URL}/settings?linkedin_connected=true`
+    `${appUrl}/settings?linkedin_connected=true`
   )
   response.cookies.delete("linkedin_oauth_state")
   return response

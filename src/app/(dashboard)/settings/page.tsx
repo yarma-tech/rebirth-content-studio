@@ -64,8 +64,19 @@ function SettingsContent() {
     if (searchParams.get("linkedin_connected")) {
       toast.success("LinkedIn connecte avec succes !")
     }
-    if (searchParams.get("linkedin_error")) {
-      toast.error(`Erreur LinkedIn : ${searchParams.get("linkedin_error")}`)
+    const linkedinError = searchParams.get("linkedin_error")
+    if (linkedinError) {
+      const messages: Record<string, string> = {
+        missing_config:
+          "Configuration LinkedIn manquante cote serveur : verifie que LINKEDIN_CLIENT_ID et LINKEDIN_CLIENT_SECRET sont definis dans Vercel.",
+        invalid_state: "Session OAuth invalide ou expiree. Reessaie la connexion.",
+        token_exchange_failed:
+          "Echange du code echoue. Verifie le client secret et l'URL de redirection dans l'app LinkedIn.",
+        profile_fetch_failed: "Impossible de recuperer ton profil LinkedIn. Reessaie.",
+        unauthorized_scope_error:
+          "Scopes non autorises : active les produits 'Sign In with LinkedIn using OpenID Connect' et 'Share on LinkedIn' dans l'app LinkedIn.",
+      }
+      toast.error(messages[linkedinError] || `Erreur LinkedIn : ${linkedinError}`)
     }
 
     fetch("/api/linkedin/status")
@@ -236,7 +247,7 @@ function SettingsContent() {
                   size="sm"
                   onClick={() => window.location.href = "/api/auth/linkedin"}
                 >
-                  Connecter LinkedIn
+                  {linkedinStatus.expired ? "Reconnecter LinkedIn" : "Connecter LinkedIn"}
                 </Button>
               </div>
             )}
@@ -375,7 +386,7 @@ function SettingsContent() {
                 Configure via .env
               </Badge>
               <p className="text-sm text-muted-foreground">
-                Modele : Claude Sonnet 4
+                Modele : Claude Sonnet 5
               </p>
             </div>
           </CardContent>
