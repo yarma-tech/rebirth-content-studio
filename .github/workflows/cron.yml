@@ -1,0 +1,66 @@
+name: Cron jobs (Vercel Hobby workaround)
+
+# Vercel Hobby limite les crons à 1x/jour et max 2 jobs.
+# On externalise l'ordonnancement ici (gratuit) et on ping les endpoints
+# /api/cron/* existants avec le CRON_SECRET. Aucune logique app modifiée.
+# Note: GitHub Actions = intervalle minimum 5 min (les schedules peuvent
+# aussi être retardés de quelques min sous charge — OK pour ce cas d'usage).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # publish + reminders — posts programmés & rappels dus
+    - cron: "0 */6 * * *"   # veille — scan RSS + scoring IA
+    - cron: "0 22 * * 5"    # newsletter — vendredi 22h UTC
+  workflow_dispatch:        # déclenchement manuel (teste tous les endpoints)
+
+concurrency:
+  group: cron
+  cancel-in-progress: false
+
+env:
+  BASE_URL: https://rebirth-content-studio.vercel.app
+
+jobs:
+  frequent:
+    # every 5 min + manuel
+    if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Publish scheduled posts
+        run: |
+          curl -fsS --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/publish"
+      - name: Send due reminders
+        run: |
+          curl -fsS --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/reminders"
+
+  veille:
+    # every 6h + manuel
+    if: github.event.schedule == '0 */6 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Run veille scan
+        run: |
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/veille"
+
+  newsletter:
+    # vendredi 22h + manuel
+    if: github.event.schedule == '0 22 * * 5' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Send newsletter if ready
+        run: |
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/newsletter"
