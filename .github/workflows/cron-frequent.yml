@@ -1,0 +1,47 @@
+# Crons haute frequence deportes hors de Vercel.
+#
+# Le plan Vercel Hobby limite les crons a 2 jobs max, 1x/jour max. Les jobs
+# publish (posts programmes) et reminders (rappels Telegram) doivent tourner
+# souvent, donc on les declenche depuis GitHub Actions qui appelle les
+# endpoints /api/cron/* avec le CRON_SECRET.
+#
+# Secrets/variables requis (repo Settings > Secrets and variables > Actions) :
+#   - secret  CRON_SECRET : identique a la variable d'env CRON_SECRET de Vercel
+#   - variable APP_URL     : (optionnel) URL de prod, defaut ci-dessous
+#
+# Note : l'intervalle minimum d'un cron GitHub Actions est de 5 min (les
+# reminders passent donc de 1 min a 5 min de granularite). GitHub peut aussi
+# retarder les executions planifiees en periode de forte charge.
+name: Cron - Publish & Reminders
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: cron-frequent
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve base URL
+        id: url
+        run: |
+          BASE_URL="${{ vars.APP_URL }}"
+          echo "base=${BASE_URL:-https://rebirth-content-studio.vercel.app}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish scheduled posts
+        run: |
+          curl --fail-with-body -sS --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ steps.url.outputs.base }}/api/cron/publish"
+
+      - name: Send due reminders
+        if: always()
+        run: |
+          curl --fail-with-body -sS --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ steps.url.outputs.base }}/api/cron/reminders"
