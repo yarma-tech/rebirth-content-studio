@@ -1,18 +1,25 @@
+"use client"
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { useSquircle, mergeRefs } from "@/components/ui/squircle"
 
 function Card({
   className,
   size = "default",
+  ref,
   ...props
 }: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+  // border (pas ring) : le trait suit le mask squircle. drop-shadow -> ombre squircle.
+  const squircleRef = useSquircle<HTMLDivElement>({ radius: 16, smoothing: 0.7 })
   return (
     <div
       data-slot="card"
       data-size={size}
+      ref={mergeRefs(ref, squircleRef)}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-4 overflow-hidden rounded-xl border border-foreground/10 bg-card py-4 text-sm text-card-foreground has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
