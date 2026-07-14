@@ -20,7 +20,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/veille", label: "Veille", icon: Eye },
   { href: "/calendrier", label: "Calendrier", icon: CalendarDays },
@@ -36,7 +36,7 @@ function NavContent({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-border">
-        <Link href="/" className="flex items-center gap-2" onClick={onClose}>
+        <Link href="/dashboard" className="flex items-center gap-2" onClick={onClose}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-rebirth-v2.png" alt="Rebirth" className="h-7 w-7" />
           <span className="font-bold text-lg">Rebirth</span>
@@ -96,7 +96,7 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-card border-b border-border">
-      <Link href="/" className="flex items-center gap-2">
+      <Link href="/dashboard" className="flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-rebirth-v2.png" alt="Rebirth" className="h-6 w-6" />
         <span className="font-bold">Rebirth</span>
